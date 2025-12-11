@@ -32,3 +32,7 @@ With cgov, you can
 TBC
 
 ![Alt](https://repobeats.axiom.co/api/embed/783bce112387ee6ab70e24a8b31532de60d40f06.svg "Repobeats analytics image")
+
+Run the thing
+
+```npm run dev```
