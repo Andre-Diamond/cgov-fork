@@ -33,6 +33,7 @@ import { Search, ExternalLink, FileText } from "lucide-react";
 interface VotingRecordsProps {
   votes: VoteRecord[];
   ccVotes?: VoteRecord[];
+  proposalStatus?: "Active" | "Ratified" | "Enacted" | "Expired" | "Closed";
 }
 
 /**
@@ -226,10 +227,15 @@ function RationaleContent({ anchorUrl }: { anchorUrl: string }) {
   );
 }
 
-export function VotingRecords({ votes, ccVotes = [] }: VotingRecordsProps) {
+export function VotingRecords({ votes, ccVotes = [], proposalStatus }: VotingRecordsProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [voteFilter, setVoteFilter] = useState<string>("all");
   const [voterTypeFilter, setVoterTypeFilter] = useState<string>("all");
+
+  // Note: proposalStatus is available for future use (e.g., showing that votes
+  // on expired proposals are historical)
+  // Currently not used in the UI
+  void proposalStatus; // Suppress unused variable warning
 
   // Combine all votes into a single array
   const allVotes = [...votes, ...ccVotes];
@@ -239,22 +245,29 @@ export function VotingRecords({ votes, ccVotes = [] }: VotingRecordsProps) {
     new Set(allVotes.map((v) => v.voterType).filter(Boolean))
   ) as string[];
 
-  const filteredVotes = allVotes.filter((vote) => {
-    const matchesSearch =
-      searchQuery === "" ||
-      vote.drepName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vote.drepId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vote.voterId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vote.voterName?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredVotes = allVotes
+    .filter((vote) => {
+      const matchesSearch =
+        searchQuery === "" ||
+        vote.drepName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        vote.drepId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        vote.voterId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        vote.voterName?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesVote =
-      voteFilter === "all" || vote.vote.toLowerCase() === voteFilter;
+      const matchesVote =
+        voteFilter === "all" || vote.vote.toLowerCase() === voteFilter;
 
-    const matchesVoterType =
-      voterTypeFilter === "all" || vote.voterType === voterTypeFilter;
+      const matchesVoterType =
+        voterTypeFilter === "all" || vote.voterType === voterTypeFilter;
 
-    return matchesSearch && matchesVote && matchesVoterType;
-  });
+      return matchesSearch && matchesVote && matchesVoterType;
+    })
+    // Sort by votedAt descending (latest first)
+    .sort((a, b) => {
+      const dateA = a.votedAt ? new Date(a.votedAt).getTime() : 0;
+      const dateB = b.votedAt ? new Date(b.votedAt).getTime() : 0;
+      return dateB - dateA;
+    });
 
   const voteStats = {
     total: allVotes.length,

@@ -7,10 +7,42 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { VotingRecords } from "@/components/VotingRecords";
+import { VoteOnProposal } from "@/components/governance";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { loadGovernanceActionDetail } from "@/store/governanceSlice";
 import { ArrowLeft } from "lucide-react";
 import type { GovernanceActionDetail } from "@/types/governance";
+
+/**
+ * Parse proposal hash (txHash:certIndex format) into separate components
+ * The API returns hash in format "txHash:certIndex"
+ */
+function parseProposalHash(hash: string): {
+  txHash: string;
+  certIndex: number;
+} | null {
+  if (!hash) return null;
+
+  // Handle txHash:certIndex format (API format)
+  if (hash.includes(":")) {
+    const [txHash, certIndexStr] = hash.split(":");
+    const certIndex = parseInt(certIndexStr, 10);
+    if (txHash && !isNaN(certIndex)) {
+      return { txHash, certIndex };
+    }
+  }
+
+  // Handle txHash#certIndex format (alternative format)
+  if (hash.includes("#")) {
+    const [txHash, certIndexStr] = hash.split("#");
+    const certIndex = parseInt(certIndexStr, 10);
+    if (txHash && !isNaN(certIndex)) {
+      return { txHash, certIndex };
+    }
+  }
+
+  return null;
+}
 
 /**
  * Legacy governance actions with special voting rules
@@ -121,8 +153,21 @@ export default function GovernanceDetail() {
     }
   }, [hash, dispatch]);
 
-  // Loading state
-  if (isLoadingDetail) {
+  // Parse proposal hash outside JSX to avoid IIFE causing component remount
+  const parsedProposalHash = selectedAction?.hash
+    ? parseProposalHash(selectedAction.hash)
+    : null;
+
+  // Only show loading state for initial load (when we don't have data yet)
+  // This prevents unmounting VoteOnProposal during polling re-fetches
+  const showLoadingState = isLoadingDetail && !selectedAction;
+
+  // Only show error state if we don't have existing data
+  // This prevents unmounting VoteOnProposal if an API call fails during polling
+  const showErrorState = detailError && !selectedAction;
+
+  // Loading state - only shown on initial load
+  if (showLoadingState) {
     return (
       <div className="min-h-screen bg-background">
         <div className="container mx-auto py-8 px-4">
@@ -145,8 +190,8 @@ export default function GovernanceDetail() {
     );
   }
 
-  // Error state
-  if (detailError) {
+  // Error state - only shown if we don't have existing data
+  if (showErrorState) {
     return (
       <div className="min-h-screen bg-background">
         <div className="container mx-auto py-8 px-4">
@@ -272,6 +317,17 @@ export default function GovernanceDetail() {
 
             {/* Right Column - Sidebar */}
             <div className="space-y-6">
+              {/* Vote on Proposal Card */}
+              {parsedProposalHash && (
+                <VoteOnProposal
+                  txHash={parsedProposalHash.txHash}
+                  certIndex={parsedProposalHash.certIndex}
+                  proposalTitle={selectedAction.title}
+                  status={selectedAction.status}
+                  proposalId={selectedAction.hash}
+                />
+              )}
+
               {/* Constitutionality Card */}
               <Card className="p-6">
                 <h3 className="font-semibold mb-2">Constitutionality</h3>
@@ -460,6 +516,7 @@ export default function GovernanceDetail() {
               <VotingRecords
                 votes={selectedAction.votes || []}
                 ccVotes={selectedAction.ccVotes || []}
+                proposalStatus={selectedAction.status}
               />
             </div>
           )}
