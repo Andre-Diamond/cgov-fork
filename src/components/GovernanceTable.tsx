@@ -228,8 +228,8 @@ export function GovernanceTable() {
     }
   };
 
-  const handleRowClick = (proposalId: string) => {
-    router.push(`/governance/${proposalId}`);
+  const handleRowClick = (hash: string) => {
+    router.push(`/governance/${hash}`);
   };
 
   return (
@@ -437,7 +437,7 @@ export function GovernanceTable() {
               <div
                 key={action.proposalId ?? action.hash}
                 className="group cursor-pointer"
-                onClick={() => handleRowClick(action.proposalId ?? action.hash)}
+                onClick={() => handleRowClick(action.hash)}
               >
                 <div className="py-4 transition-transform duration-300 group-hover:scale-[1.01] sm:py-6">
                   <div className="mb-4 flex flex-col gap-6 sm:mb-6 sm:flex-row sm:items-center sm:gap-8">
