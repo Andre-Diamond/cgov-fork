@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef } from "react";
 import type { VoteRecord, VoterType } from "@/types/governance";
 import {
   Select,
@@ -26,6 +26,33 @@ interface Bubble {
 interface VoteColors {
   fill: string;
   border: string;
+}
+
+// Convert a vote's on-chain voting power to ADA
+function getVotingPowerAda(vote: VoteRecord): number {
+  const { votingPowerAda, votingPower } = vote;
+
+  // 1) Prefer any existing votingPowerAda field
+  if (
+    typeof votingPowerAda === "number" &&
+    !Number.isNaN(votingPowerAda) &&
+    votingPowerAda > 0
+  ) {
+    return votingPowerAda;
+  }
+
+  // 2) Otherwise, convert lovelace string/number to ADA
+  if (votingPower != null) {
+    const n =
+      typeof votingPower === "string"
+        ? Number(votingPower)
+        : (votingPower as number);
+    if (!Number.isNaN(n) && n > 0) {
+      return n / 1_000_000;
+    }
+  }
+
+  return 0;
 }
 
 function getVoteColors(vote: VoteRecord["vote"], voterType?: VoteRecord["voterType"]): VoteColors {
@@ -144,16 +171,16 @@ export function BubbleMap({ votes }: BubbleMapProps) {
   const bubbles = useMemo(() => {
     if (filteredVotes.length === 0) return [];
 
-    const validVotes = filteredVotes.filter((v) => v.votingPowerAda && v.votingPowerAda > 0);
-    const zeroPowerVotes = filteredVotes.filter((v) => !v.votingPowerAda || v.votingPowerAda === 0);
+    const validVotes = filteredVotes.filter((v) => getVotingPowerAda(v) > 0);
+    const zeroPowerVotes = filteredVotes.filter((v) => getVotingPowerAda(v) === 0);
     const allVotesToPlace = [...validVotes, ...zeroPowerVotes];
     if (allVotesToPlace.length === 0) return [];
 
-    const validVotesWithPower = validVotes.filter((v) => (v.votingPowerAda || 0) > 0);
+    const validVotesWithPower = validVotes.filter((v) => getVotingPowerAda(v) > 0);
     const maxPower =
-      validVotesWithPower.length > 0 ? Math.max(...validVotesWithPower.map((v) => v.votingPowerAda || 0)) : 1;
+      validVotesWithPower.length > 0 ? Math.max(...validVotesWithPower.map((v) => getVotingPowerAda(v))) : 1;
     const minPower =
-      validVotesWithPower.length > 0 ? Math.min(...validVotesWithPower.map((v) => v.votingPowerAda || 0)) : 1;
+      validVotesWithPower.length > 0 ? Math.min(...validVotesWithPower.map((v) => getVotingPowerAda(v))) : 1;
     const powerRange = maxPower - minPower || 1;
 
     const minRadius = 8;
@@ -199,16 +226,31 @@ export function BubbleMap({ votes }: BubbleMapProps) {
       const nonCCVotes = cluster.votes.filter((v) => v.voterType !== "CC");
       
       // Sort both groups by voting power
-      const sortedCCVotes = [...ccVotes].sort((a, b) => (b.votingPowerAda || 0) - (a.votingPowerAda || 0));
-      const sortedNonCCVotes = [...nonCCVotes].sort((a, b) => (b.votingPowerAda || 0) - (a.votingPowerAda || 0));
+      const sortedCCVotes = [...ccVotes].sort(
+        (a, b) => getVotingPowerAda(b) - getVotingPowerAda(a)
+      );
+      const sortedNonCCVotes = [...nonCCVotes].sort(
+        (a, b) => getVotingPowerAda(b) - getVotingPowerAda(a)
+      );
 
       // Place CC votes first in a tight sub-cluster at the center
       if (sortedCCVotes.length > 0) {
         const ccClusterRadius = Math.min(40, Math.sqrt(sortedCCVotes.length) * 12);
         
         sortedCCVotes.forEach((vote, index) => {
-          const power = vote.votingPowerAda || 0;
+          const power = getVotingPowerAda(vote);
           const radius = power > 0 ? minRadius + ((power - minPower) / powerRange) * radiusRange : 10;
+
+          if (process.env.NODE_ENV === "development") {
+            // eslint-disable-next-line no-console
+            console.log("[BubbleMap] CC bubble", {
+              voterId: vote.voterId || vote.drepId,
+              voterType: vote.voterType,
+              vote: vote.vote,
+              powerAda: power,
+              radius,
+            });
+          }
 
           const palette = getVoteColors(vote.vote, vote.voterType);
           const angleStep = sortedCCVotes.length > 1 ? (Math.PI * 2) / sortedCCVotes.length : 0;
@@ -273,8 +315,19 @@ export function BubbleMap({ votes }: BubbleMapProps) {
       // Place non-CC votes around the CC cluster
       const startAngle = sortedCCVotes.length > 0 ? Math.PI / 4 : 0; // Offset if CC votes exist
       sortedNonCCVotes.forEach((vote, index) => {
-        const power = vote.votingPowerAda || 0;
+        const power = getVotingPowerAda(vote);
         const radius = power > 0 ? minRadius + ((power - minPower) / powerRange) * radiusRange : 10;
+
+        if (process.env.NODE_ENV === "development") {
+          // eslint-disable-next-line no-console
+          console.log("[BubbleMap] non-CC bubble", {
+            voterId: vote.voterId || vote.drepId,
+            voterType: vote.voterType,
+            vote: vote.vote,
+            powerAda: power,
+            radius,
+          });
+        }
 
         const palette = getVoteColors(vote.vote, vote.voterType);
         const angleStep = sortedNonCCVotes.length > 0 ? (Math.PI * 2) / sortedNonCCVotes.length : 0;
@@ -370,9 +423,9 @@ export function BubbleMap({ votes }: BubbleMapProps) {
     );
   }
 
-  const yesVotes = filteredVotes.filter((v) => v.vote === "Yes");
-  const noVotes = filteredVotes.filter((v) => v.vote === "No");
-  const abstainVotes = filteredVotes.filter((v) => v.vote === "Abstain");
+          const yesVotes = filteredVotes.filter((v) => v.vote === "Yes");
+          const noVotes = filteredVotes.filter((v) => v.vote === "No");
+          const abstainVotes = filteredVotes.filter((v) => v.vote === "Abstain");
 
   const containerWidth = 800;
   const containerHeight = 600;
@@ -519,7 +572,7 @@ export function BubbleMap({ votes }: BubbleMapProps) {
               </pattern>
             </defs>
           {bubbles.map((bubble, index) => {
-            const power = bubble.vote.votingPowerAda || 0;
+            const power = getVotingPowerAda(bubble.vote);
             const palette = getVoteColors(bubble.vote.vote, bubble.vote.voterType);
             const isCC = bubble.vote.voterType === "CC";
             const isHighlighted = hoveredBadge === bubble.vote.vote;
@@ -662,9 +715,10 @@ export function BubbleMap({ votes }: BubbleMapProps) {
             <div className="mt-1 text-muted-foreground">
               <span className="font-medium">Vote:</span> {hoveredBubble.bubble.vote.vote}
             </div>
-            {hoveredBubble.bubble.vote.votingPowerAda && hoveredBubble.bubble.vote.votingPowerAda > 0 ? (
+            {getVotingPowerAda(hoveredBubble.bubble.vote) > 0 ? (
               <div className="mt-1 text-muted-foreground">
-                <span className="font-medium">Power:</span> {formatAda(hoveredBubble.bubble.vote.votingPowerAda)} ADA
+                <span className="font-medium">Power:</span>{" "}
+                {formatAda(getVotingPowerAda(hoveredBubble.bubble.vote))} ADA
               </div>
             ) : null}
           </div>

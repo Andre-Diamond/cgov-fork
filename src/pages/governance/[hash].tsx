@@ -215,6 +215,8 @@ export default function GovernanceDetail() {
   const [curveRoleFilter, setCurveRoleFilter] =
     useState<RoleFilter>("All");
   const [selectedTab, setSelectedTab] = useState<string | null>("live-voting");
+  const [isRationaleExpanded, setIsRationaleExpanded] =
+    useState<boolean>(false);
 
   useEffect(() => {
     if (typeof hash === "string") {
@@ -1134,10 +1136,23 @@ export default function GovernanceDetail() {
               {/* Rationale Card (outside tabs, same column) */}
               {selectedAction.rationale && (
                 <Card className="p-6">
-                  <h2 className="mb-4 text-xl font-semibold">Rationale</h2>
-                  <div className="whitespace-pre-wrap leading-relaxed text-foreground/90">
-                    {selectedAction.rationale}
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h2 className="text-xl font-semibold">Rationale</h2>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setIsRationaleExpanded((prevExpanded) => !prevExpanded)
+                      }
+                    >
+                      {isRationaleExpanded ? "Hide Rationale" : "Show Rationale"}
+                    </Button>
                   </div>
+                  {isRationaleExpanded && (
+                    <div className="mt-2 whitespace-pre-wrap leading-relaxed text-foreground/90">
+                      {selectedAction.rationale}
+                    </div>
+                  )}
                 </Card>
               )}
             </div>
