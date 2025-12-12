@@ -1,4 +1,184 @@
-// Proposal status from API
+/**
+ * Vote info for DRep and SPO voters (ADA-based voting power)
+ * API returns values in lovelace, frontend converts to ADA for display
+ */
+export interface GovernanceActionVoteInfo {
+  yesPercent: number;
+  noPercent: number;
+  abstainPercent: number;
+  // API returns lovelace values
+  yesLovelace?: string;
+  noLovelace?: string;
+  abstainLovelace?: string;
+  // Frontend uses ADA values for display
+  yesAda: string;
+  noAda: string;
+  abstainAda: string;
+}
+
+/**
+ * Vote info for Constitutional Committee (count-based)
+ */
+export interface CCGovernanceActionVoteInfo {
+  yesPercent: number;
+  noPercent: number;
+  abstainPercent: number;
+  yesCount: number;
+  noCount: number;
+  abstainCount: number;
+}
+
+/**
+ * Main governance action interface
+ * Matches the API response from /overview/proposals
+ */
+export interface GovernanceAction {
+  // Identifiers
+  hash: string; // Used for routing - typically proposalId
+  proposalId?: string; // Cardano governance action ID (txHash:certIndex)
+  txHash?: string; // Transaction hash
+
+  // Content
+  title: string;
+  type: string; // Governance action type label
+  status: "Active" | "Ratified" | "Enacted" | "Expired" | "Closed";
+  constitutionality: string;
+
+  // DRep voting data (flattened for easy access)
+  drepYesPercent: number;
+  drepNoPercent: number;
+  drepAbstainPercent?: number;
+  drepYesAda: string;
+  drepNoAda: string;
+  drepAbstainAda?: string;
+
+  // SPO voting data (optional - not all actions require SPO votes)
+  spoYesPercent?: number;
+  spoNoPercent?: number;
+  spoAbstainPercent?: number;
+  spoYesAda?: string;
+  spoNoAda?: string;
+  spoAbstainAda?: string;
+
+  // CC voting data (optional - not all actions require CC votes)
+  ccYesPercent?: number;
+  ccNoPercent?: number;
+  ccAbstainPercent?: number;
+  ccYesCount?: number;
+  ccNoCount?: number;
+  ccAbstainCount?: number;
+
+  // Vote totals (counts across all voter types)
+  totalYes: number;
+  totalNo: number;
+  totalAbstain: number;
+
+  // Epoch information
+  submissionEpoch: number;
+  expiryEpoch: number;
+
+  // Raw API vote info objects (for advanced use)
+  drep?: GovernanceActionVoteInfo;
+  spo?: GovernanceActionVoteInfo;
+  cc?: CCGovernanceActionVoteInfo;
+}
+
+/**
+ * Individual vote record
+ * Matches the API response for vote details
+ */
+export interface VoteRecord {
+  voterType?: "DRep" | "SPO" | "CC";
+  voterId?: string;
+  voterName?: string;
+  // Legacy fields for backwards compatibility
+  drepId: string;
+  drepName: string;
+  vote: "Yes" | "No" | "Abstain";
+  votingPower: string;
+  votingPowerAda: number;
+  anchorUrl?: string;
+  anchorHash?: string;
+  votedAt: string;
+}
+
+/**
+ * Detailed governance action with full description and vote records
+ * Matches the API response from /proposal/:id
+ */
+export interface GovernanceActionDetail extends GovernanceAction {
+  description?: string;
+  rationale?: string;
+  votes?: VoteRecord[]; // DRep and SPO votes
+  ccVotes?: VoteRecord[]; // Constitutional Committee votes
+}
+
+/**
+ * Governance action type filter options
+ */
+export type GovernanceActionType =
+  | "All"
+  | "Info Action"
+  | "Treasury Withdrawals"
+  | "New Constitution"
+  | "Hard Fork Initiation"
+  | "Protocol Parameter Change"
+  | "No Confidence"
+  | "Update Committee";
+
+/**
+ * Vote type filter options
+ */
+export type VoteType = "All" | "Yes" | "No" | "Abstain";
+
+/**
+ * Overview summary data from API
+ * Matches the API response from /overview
+ */
+export interface OverviewSummary {
+  year: number;
+  currentValue: number; // Active proposals
+  targetValue: number; // Total proposals
+  totalProposals: number;
+  activeProposals: number;
+  ratifiedProposals: number;
+  enactedProposals: number;
+  expiredProposals: number;
+  closedProposals: number;
+}
+
+/**
+ * NCL (Net Change Limit) data for treasury withdrawal tracking
+ * Values are in lovelace (1 ADA = 1,000,000 lovelace)
+ */
+export interface NCLYearData {
+  year: number;
+  currentValue: string; // In lovelace (string for BigInt serialization)
+  targetValue: string; // In lovelace (string for BigInt serialization)
+  epoch: number;
+  updatedAt: string;
+}
+
+/**
+ * NCL data formatted for display (in ADA)
+ */
+export interface NCLDisplayData {
+  year: number;
+  currentValueAda: number;
+  targetValueAda: number;
+  percentUsed: number;
+  epoch: number;
+  updatedAt: string;
+}
+
+/**
+ * High–level vote type used by UI components
+ */
+export type Vote = VoteRecord;
+
+/**
+ * Proposal status values used across the app
+ */
 export type ProposalStatus =
   | "Active"
   | "Ratified"
@@ -6,7 +186,9 @@ export type ProposalStatus =
   | "Approved"
   | "Not approved";
 
-// Proposal type from API
+/**
+ * Proposal type values used across the app
+ */
 export type ProposalType =
   | "InfoAction"
   | "HardForkInitiation"
@@ -16,6 +198,9 @@ export type ProposalType =
   | "NewConstitution"
   | "Treasury";
 
+/**
+ * Convenience list of all proposal types, in a stable order
+ */
 export const PROPOSAL_TYPES: ProposalType[] = [
   "NoConfidence",
   "UpdateCommittee",
@@ -26,70 +211,7 @@ export const PROPOSAL_TYPES: ProposalType[] = [
   "InfoAction",
 ];
 
-// Voter type
+/**
+ * Voter roles
+ */
 export type VoterType = "DRep" | "SPO" | "CC";
-
-// Vote choice
-export type VoteChoice = "Yes" | "No" | "Abstain";
-
-// Unified voting info for DRep, SPO, and CC
-export interface VotingInfo {
-  yesPercent: number;
-  noPercent: number;
-  abstainPercent?: number;
-  yesAda?: string;
-  noAda?: string;
-  abstainAda?: string;
-  yesCount?: number;
-  noCount?: number;
-  abstainCount?: number;
-}
-
-// Individual vote record
-export interface Vote {
-  voterType: VoterType;
-  voterId: string;
-  voterName?: string;
-  vote: VoteChoice;
-  votingPower?: string; // Voting power in lovelace (string)
-  votingPowerAda?: number; // Voting power in ADA (number, calculated for UI)
-  anchorUrl?: string;
-  anchorHash?: string;
-  votedAt?: string;
-}
-
-export type VoteRecord = Vote;
-
-// Basic governance action (list view)
-export interface GovernanceAction {
-  id: string;
-  txHash: string;
-  certIndex: number;
-  type: ProposalType | string;
-  title: string;
-  status: ProposalStatus;
-  constitutionality?: string;
-  drep?: VotingInfo;
-  spo?: VotingInfo;
-  cc?: VotingInfo;
-  submissionEpoch: number;
-  expiryEpoch?: number;
-}
-
-// Detailed governance action (detail view)
-export interface GovernanceActionDetail extends GovernanceAction {
-  description?: string;
-  rationale?: string;
-  votes?: Vote[];
-  ccVotes?: Vote[];
-}
-
-// Filter types for UI
-export type GovernanceActionType = "All" | ProposalType;
-export type VoteType = "All" | "Yes" | "No" | "Abstain";
-
-export interface NCLData {
-  year: number;
-  currentValue: number;
-  targetValue: number;
-}

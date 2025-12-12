@@ -1,57 +1,89 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Head from "next/head";
 import { GovernanceStats } from "@/components/GovernanceStats";
 import { GovernanceTable } from "@/components/GovernanceTable";
-import { useAppDispatch } from "@/store/hooks";
-import { setActions } from "@/store/governanceSlice";
-import { useGovernanceApi } from "@/contexts/GovernanceApiContext";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  loadGovernanceActions,
+  loadOverviewSummary,
+  loadNCLData,
+} from "@/store/governanceSlice";
+import { Card } from "@/components/ui/card";
 
 export default function Home() {
   const dispatch = useAppDispatch();
-  const [loading, setLoading] = useState(true);
-  const api = useGovernanceApi();
+  const { isLoadingActions, actionsError, isLoadingOverview, overviewError } =
+    useAppSelector((state) => state.governance);
 
   useEffect(() => {
-    const loadProposals = async () => {
-      try {
-        setLoading(true);
-        const proposals = await api.getProposals();
-        dispatch(setActions(proposals));
-        // Small delay to ensure smooth transition
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (error) {
-        console.error("Error loading proposals:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    dispatch(loadGovernanceActions());
+    dispatch(loadOverviewSummary());
+    dispatch(loadNCLData());
+  }, [dispatch]);
 
-    loadProposals();
-  }, [dispatch, api]);
+  const isLoading = isLoadingActions || isLoadingOverview;
+  const error = actionsError || overviewError;
 
   return (
     <>
       <Head>
         <title>CGOV - Cardano Governance Platform</title>
-        <meta name="description" content="Integrated Cardano on-chain platform" />
+        <meta
+          name="description"
+          content="Integrated Cardano on-chain platform"
+        />
       </Head>
       <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
-          {loading ? (
-            <div className="py-12 text-center animate-fade-in">
-              <p className="text-muted-foreground">Loading proposals...</p>
-            </div>
-          ) : (
-            <div className="space-y-8 lg:space-y-10 animate-slide-in-bottom">
-              <section className="w-full">
-                <div className="w-full max-w-2xl">
-                  <GovernanceStats />
-                </div>
-              </section>
-              <section>
-                <GovernanceTable />
-              </section>
-            </div>
+        <div className="container mx-auto px-4 py-8">
+          <div className="mb-8 text-center">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
+              Cardano Governance
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              Track and monitor on-chain governance actions
+            </p>
+          </div>
+
+          {/* Error state */}
+          {error && (
+            <Card className="p-6 mb-6 border-destructive bg-destructive/10">
+              <div className="text-center">
+                <p className="text-destructive font-medium mb-2">
+                  Failed to load data
+                </p>
+                <p className="text-sm text-muted-foreground">{error}</p>
+                <button
+                  onClick={() => {
+                    dispatch(loadGovernanceActions());
+                    dispatch(loadOverviewSummary());
+                    dispatch(loadNCLData());
+                  }}
+                  className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            </Card>
+          )}
+
+          {/* Loading state */}
+          {isLoading && !error && (
+            <Card className="p-12 mb-6">
+              <div className="flex flex-col items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+                <p className="text-muted-foreground">
+                  Loading governance data...
+                </p>
+              </div>
+            </Card>
+          )}
+
+          {/* Content */}
+          {!isLoading && !error && (
+            <>
+              <GovernanceStats />
+              <GovernanceTable />
+            </>
           )}
         </div>
       </div>

@@ -1,5 +1,12 @@
 import * as React from "react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, type TooltipProps } from "recharts";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  type TooltipProps,
+} from "recharts";
 import { cn } from "@/lib/utils";
 
 interface VoteProgressProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -72,10 +79,20 @@ export const VoteProgress = React.forwardRef<HTMLDivElement, VoteProgressProps>(
     const data = React.useMemo<SliceData[]>(() => {
       const result: SliceData[] = [];
       if (yesPercent > 0) {
-        result.push({ name: "Yes", value: yesPercent, type: "yes", displayValue: yesValue });
+        result.push({
+          name: "Yes",
+          value: yesPercent,
+          type: "yes",
+          displayValue: yesValue,
+        });
       }
       if (noPercent > 0) {
-        result.push({ name: "No", value: noPercent, type: "no", displayValue: noValue });
+        result.push({
+          name: "No",
+          value: noPercent,
+          type: "no",
+          displayValue: noValue,
+        });
       }
       if (abstainPercent > 0) {
         result.push({
@@ -86,7 +103,14 @@ export const VoteProgress = React.forwardRef<HTMLDivElement, VoteProgressProps>(
         });
       }
       return result;
-    }, [yesPercent, noPercent, abstainPercent, yesValue, noValue, abstainValue]);
+    }, [
+      yesPercent,
+      noPercent,
+      abstainPercent,
+      yesValue,
+      noValue,
+      abstainValue,
+    ]);
 
     const clearHoverTimeout = React.useCallback(() => {
       if (hoverTimeout.current) {
@@ -158,7 +182,9 @@ export const VoteProgress = React.forwardRef<HTMLDivElement, VoteProgressProps>(
             </div>
             <div className="font-semibold text-foreground">
               {slice.name}:{" "}
-              {displayValue ? `${displayValue} • ${slice.value.toFixed(1)}%` : `${slice.value.toFixed(1)}%`}
+              {displayValue
+                ? `${displayValue} • ${slice.value.toFixed(1)}%`
+                : `${slice.value.toFixed(1)}%`}
             </div>
           </div>
         );
@@ -184,14 +210,14 @@ export const VoteProgress = React.forwardRef<HTMLDivElement, VoteProgressProps>(
         <div
           ref={ref}
           className={cn(
-            "flex flex-col items-center gap-2 border border-white/8 bg-[#faf9f6] shadow-[0_12px_30px_rgba(15,23,42,0.25)]",
+            "border-white/8 flex flex-col items-center gap-2 border bg-[#faf9f6] shadow-[0_12px_30px_rgba(15,23,42,0.25)]",
             className
           )}
           style={cardStyle}
           {...props}
         >
           {title && (
-            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            <span className="whitespace-nowrap text-sm font-medium text-muted-foreground">
               {title}
             </span>
           )}
@@ -206,20 +232,20 @@ export const VoteProgress = React.forwardRef<HTMLDivElement, VoteProgressProps>(
       <div
         ref={ref}
         className={cn(
-          "flex flex-col items-center gap-2 border border-white/8 bg-[#faf9f6] shadow-[0_12px_30px_rgba(15,23,42,0.25)]",
+          "border-white/8 flex flex-col items-center gap-2 border bg-[#faf9f6] shadow-[0_12px_30px_rgba(15,23,42,0.25)]",
           className
         )}
         {...props}
         style={cardStyle}
       >
         {title && titlePosition === "top" && (
-          <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+          <span className="whitespace-nowrap text-sm font-medium text-muted-foreground">
             {title}
           </span>
         )}
         <div
           className="recharts-no-box relative overflow-visible"
-          style={{ width: "132px", height: "132px" }}
+          style={{ width: 132, height: 132, minWidth: 132, minHeight: 132 }}
           onMouseLeave={onPieLeave}
         >
           {title && titlePosition === "center" && (
@@ -227,80 +253,87 @@ export const VoteProgress = React.forwardRef<HTMLDivElement, VoteProgressProps>(
               {title}
             </span>
           )}
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
+          <PieChart
+            width={132}
+            height={132}
             className="overflow-visible"
-            style={{ overflow: "visible" }}
+            style={{
+              background: "transparent",
+              border: "none",
+              outline: "none",
+            }}
+            margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
+            onMouseLeave={onPieLeave}
           >
-            <PieChart
-              className="overflow-visible"
-              style={{ background: "transparent", border: "none", outline: "none" }}
-              margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
+            <defs>
+              <radialGradient
+                id="slice-edge-overlay"
+                cx="0.5"
+                cy="0.5"
+                r="0.95"
+              >
+                <stop offset="65%" stopColor="rgba(0,0,0,0)" />
+                <stop offset="85%" stopColor="rgba(15,23,42,0.08)" />
+                <stop offset="95%" stopColor="rgba(15,23,42,0.15)" />
+                <stop offset="100%" stopColor="rgba(15,23,42,0.2)" />
+              </radialGradient>
+            </defs>
+            <Tooltip
+              content={tooltipContent}
+              cursor={false}
+              wrapperClassName="recharts-no-box"
+              active={tooltipVisible}
+              wrapperStyle={{ pointerEvents: "none" }}
+            />
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={44}
+              outerRadius={58}
+              paddingAngle={2}
+              dataKey="value"
+              onMouseEnter={onPieEnter}
               onMouseLeave={onPieLeave}
+              stroke="none"
             >
-              <defs>
-                <radialGradient id="slice-edge-overlay" cx="0.5" cy="0.5" r="0.95">
-                  <stop offset="65%" stopColor="rgba(0,0,0,0)" />
-                  <stop offset="85%" stopColor="rgba(15,23,42,0.08)" />
-                  <stop offset="95%" stopColor="rgba(15,23,42,0.15)" />
-                  <stop offset="100%" stopColor="rgba(15,23,42,0.2)" />
-                </radialGradient>
-              </defs>
-              <Tooltip
-                content={tooltipContent}
-                cursor={false}
-                wrapperClassName="recharts-no-box"
-                active={tooltipVisible}
-                wrapperStyle={{ pointerEvents: "none" }}
-              />
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={44}
-                outerRadius={58}
-                paddingAngle={2}
-                dataKey="value"
-                onMouseEnter={onPieEnter}
-                onMouseLeave={onPieLeave}
-                stroke="none"
-              >
-                {data.map((entry, index) => {
-                  const isAbstain = entry.type === "abstain";
-                  return (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={getColor(entry.type, index)}
-                      stroke={isAbstain ? "rgba(15, 23, 42, 0.35)" : "transparent"}
-                      strokeWidth={isAbstain ? 1.2 : 0}
-                      style={{
-                        transition: "all 0.2s ease-in-out",
-                        transform: activeIndex === index ? "scale(1.05)" : "scale(1)",
-                        transformOrigin: "center",
-                      }}
-                    />
-                  );
-                })}
-              </Pie>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={56}
-                outerRadius={60}
-                paddingAngle={2}
-                dataKey="value"
-                stroke="none"
-                isAnimationActive={false}
-                style={{ pointerEvents: "none" }}
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`edge-${index}`} fill="url(#slice-edge-overlay)" />
-                ))}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
+              {data.map((entry, index) => {
+                const isAbstain = entry.type === "abstain";
+                return (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={getColor(entry.type, index)}
+                    stroke={
+                      isAbstain ? "rgba(15, 23, 42, 0.35)" : "transparent"
+                    }
+                    strokeWidth={isAbstain ? 1.2 : 0}
+                    style={{
+                      transition: "all 0.2s ease-in-out",
+                      transform:
+                        activeIndex === index ? "scale(1.05)" : "scale(1)",
+                      transformOrigin: "center",
+                    }}
+                  />
+                );
+              })}
+            </Pie>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={56}
+              outerRadius={60}
+              paddingAngle={2}
+              dataKey="value"
+              stroke="none"
+              isAnimationActive={false}
+              style={{ pointerEvents: "none" }}
+            >
+              {data.map((entry, index) => (
+                <Cell key={`edge-${index}`} fill="url(#slice-edge-overlay)" />
+              ))}
+            </Pie>
+          </PieChart>
         </div>
       </div>
     );

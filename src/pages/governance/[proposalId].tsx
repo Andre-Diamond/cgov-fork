@@ -24,11 +24,19 @@ import {
   Legend,
 } from "recharts";
 import type { TooltipProps } from "recharts";
-import { exportToJSON, exportToMarkdown, exportToCSV, downloadFile } from "@/lib/exportRationales";
+import {
+  exportToJSON,
+  exportToMarkdown,
+  exportToCSV,
+  downloadFile,
+} from "@/lib/exportRationales";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { GovernanceAction, VoterType } from "@/types/governance";
 import { parseNumeric, deriveCcAbstainCount } from "@/lib/voteMath";
-import { canRoleVoteOnAction, getEligibleRoles } from "@/lib/governanceVotingEligibility";
+import {
+  canRoleVoteOnAction,
+  getEligibleRoles,
+} from "@/lib/governanceVotingEligibility";
 
 function getStatusColor(status: GovernanceAction["status"]): string {
   switch (status) {
@@ -71,13 +79,16 @@ export default function GovernanceDetail() {
   const router = useRouter();
   const { proposalId } = router.query;
   const dispatch = useAppDispatch();
-  const selectedAction = useAppSelector((state) => state.governance.selectedAction);
+  const selectedAction = useAppSelector(
+    (state) => state.governance.selectedAction
+  );
 
   const [downloadFormat, setDownloadFormat] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [contentVisible, setContentVisible] = useState(false);
   const [selectedTab, setSelectedTab] = useState<string | null>("live-voting");
-  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState<boolean>(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] =
+    useState<boolean>(false);
   const api = useGovernanceApi();
 
   useEffect(() => {
@@ -85,7 +96,7 @@ export default function GovernanceDetail() {
       if (!router.isReady || typeof proposalId !== "string") {
         return;
       }
-      
+
       try {
         setLoading(true);
         setContentVisible(false);
@@ -118,14 +129,19 @@ export default function GovernanceDetail() {
     const shouldTruncate = description.length > maxPreviewLength;
     return {
       full: description,
-      preview: shouldTruncate ? description.substring(0, maxPreviewLength) + "..." : description,
+      preview: shouldTruncate
+        ? description.substring(0, maxPreviewLength) + "..."
+        : description,
       shouldTruncate,
     };
   }, [selectedAction?.description]);
 
   const drepAbstainStats = useMemo(() => {
     const drepVotes = allVotes.filter((v) => v.voterType === "DRep");
-    const totalPower = drepVotes.reduce((sum, v) => sum + (v.votingPowerAda || 0), 0);
+    const totalPower = drepVotes.reduce(
+      (sum, v) => sum + (v.votingPowerAda || 0),
+      0
+    );
     if (totalPower <= 0) {
       return { percent: 0, power: 0 };
     }
@@ -140,7 +156,10 @@ export default function GovernanceDetail() {
 
   const spoAbstainStats = useMemo(() => {
     const spoVotes = allVotes.filter((v) => v.voterType === "SPO");
-    const totalPower = spoVotes.reduce((sum, v) => sum + (v.votingPowerAda || 0), 0);
+    const totalPower = spoVotes.reduce(
+      (sum, v) => sum + (v.votingPowerAda || 0),
+      0
+    );
     if (totalPower <= 0) {
       return { percent: 0, power: 0 };
     }
@@ -192,7 +211,10 @@ export default function GovernanceDetail() {
   }, [selectedAction]);
 
   const [curveRoleFilter, setCurveRoleFilter] = useState<RoleFilter>("All");
-  const curveRoleOptions = useMemo<RoleFilter[]>(() => ["All", ...eligibleRoles], [eligibleRoles]);
+  const curveRoleOptions = useMemo<RoleFilter[]>(
+    () => ["All", ...eligibleRoles],
+    [eligibleRoles]
+  );
 
   useEffect(() => {
     if (!curveRoleOptions.includes(curveRoleFilter)) {
@@ -202,7 +224,9 @@ export default function GovernanceDetail() {
 
   const voteTimelineData = useMemo<TimelinePoint[]>(() => {
     const roleFilteredVotes =
-      curveRoleFilter === "All" ? allVotes : allVotes.filter((vote) => vote.voterType === curveRoleFilter);
+      curveRoleFilter === "All"
+        ? allVotes
+        : allVotes.filter((vote) => vote.voterType === curveRoleFilter);
 
     if (!roleFilteredVotes.length) return [];
     const votesWithDates = roleFilteredVotes
@@ -265,7 +289,8 @@ export default function GovernanceDetail() {
     });
   }, [allVotes, curveRoleFilter]);
 
-  const shouldShowPower = curveRoleFilter === "DRep" || curveRoleFilter === "SPO";
+  const shouldShowPower =
+    curveRoleFilter === "DRep" || curveRoleFilter === "SPO";
   const renderVoteTrendTooltip = useCallback(
     (tooltipProps: TooltipProps<number, string>) => (
       <VoteTrendTooltip {...tooltipProps} showPower={shouldShowPower} />
@@ -277,10 +302,12 @@ export default function GovernanceDetail() {
   if (!router.isReady || loading || !selectedAction) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="container mx-auto py-8 px-4">
-          <div className="text-center animate-fade-in">
+        <div className="container mx-auto px-4 py-8">
+          <div className="animate-fade-in text-center">
             <p className="text-muted-foreground">
-              {loading ? "Loading governance action..." : "Governance action not found"}
+              {loading
+                ? "Loading governance action..."
+                : "Governance action not found"}
             </p>
           </div>
         </div>
@@ -304,18 +331,21 @@ export default function GovernanceDetail() {
   const ccNoCount = ccAbstainStats.noCount ?? ccInfo?.noCount ?? 0;
 
   const handleTwitterShare = () => {
-    const url = typeof window !== "undefined" 
-      ? `${window.location.origin}/governance/${selectedAction.id}`
-      : "";
+    const url =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/governance/${selectedAction.id}`
+        : "";
     const text = `Check out this Cardano governance proposal: ${selectedAction.title}`;
     const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
     window.open(twitterUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleExport = (format: "json" | "markdown" | "csv") => {
-    const sanitizedTitle = selectedAction.title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+    const sanitizedTitle = selectedAction.title
+      .replace(/[^a-z0-9]/gi, "_")
+      .toLowerCase();
     const timestamp = new Date().toISOString().split("T")[0];
-    
+
     let content: string;
     let filename: string;
     let mimeType: string;
@@ -346,17 +376,23 @@ export default function GovernanceDetail() {
     <>
       <Head>
         <title>{selectedAction.title} - Cardano Governance</title>
-        <meta name="description" content={selectedAction.description || selectedAction.title} />
+        <meta
+          name="description"
+          content={selectedAction.description || selectedAction.title}
+        />
       </Head>
       <div className="min-h-screen bg-background">
-        <div className={`container mx-auto px-4 sm:px-6 py-6 sm:py-8 transition-opacity duration-300 ${contentVisible ? "opacity-100" : "opacity-0"}`}>
-
+        <div
+          className={`container mx-auto px-4 py-6 transition-opacity duration-300 sm:px-6 sm:py-8 ${contentVisible ? "opacity-100" : "opacity-0"}`}
+        >
           {/* Header Section */}
-          <Card className={`mb-6 sm:mb-8 animate-slide-in-bottom`}>
+          <Card className={`animate-slide-in-bottom mb-6 sm:mb-8`}>
             <div className="p-4 sm:p-6">
               <div className="mb-4">
-                <div className="border-t border-border/50 pt-4 mb-4">
-                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">{selectedAction.title}</h1>
+                <div className="mb-4 border-t border-border/50 pt-4">
+                  <h1 className="mb-4 text-2xl font-bold sm:text-3xl md:text-4xl">
+                    {selectedAction.title}
+                  </h1>
                   <div className="flex flex-wrap items-center gap-2">
                     {allVotes.length > 0 && (
                       <Button
@@ -374,25 +410,29 @@ export default function GovernanceDetail() {
                 </div>
               </div>
               {descriptionPreview && (
-                <div className="mt-4 pt-4 border-t border-border/50">
-                  <div className="text-sm sm:text-base text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                    {isDescriptionExpanded ? descriptionPreview.full : descriptionPreview.preview}
+                <div className="mt-4 border-t border-border/50 pt-4">
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90 sm:text-base">
+                    {isDescriptionExpanded
+                      ? descriptionPreview.full
+                      : descriptionPreview.preview}
                   </div>
                   {descriptionPreview.shouldTruncate && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                      onClick={() =>
+                        setIsDescriptionExpanded(!isDescriptionExpanded)
+                      }
                       className="mt-3"
                     >
                       {isDescriptionExpanded ? (
                         <>
-                          <ChevronUp className="h-4 w-4 mr-1" />
+                          <ChevronUp className="mr-1 h-4 w-4" />
                           Show Less
                         </>
                       ) : (
                         <>
-                          <ChevronDown className="h-4 w-4 mr-1" />
+                          <ChevronDown className="mr-1 h-4 w-4" />
                           Show More
                         </>
                       )}
@@ -403,10 +443,16 @@ export default function GovernanceDetail() {
             </div>
           </Card>
 
-          <div className={`mb-6 sm:mb-8 transition-opacity duration-300 delay-75 ${contentVisible ? "opacity-100" : "opacity-0"}`}>
-            <Tabs value={selectedTab || undefined} onValueChange={setSelectedTab} className="w-full">
+          <div
+            className={`mb-6 transition-opacity delay-75 duration-300 sm:mb-8 ${contentVisible ? "opacity-100" : "opacity-0"}`}
+          >
+            <Tabs
+              value={selectedTab || undefined}
+              onValueChange={setSelectedTab}
+              className="w-full"
+            >
               <div className="flex flex-col gap-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <TabsList className="flex-1 flex-wrap justify-start gap-1 bg-transparent p-0">
                     <TabsTrigger value="live-voting">Live Voting</TabsTrigger>
                     <TabsTrigger value="bubble-map">Bubble Map</TabsTrigger>
@@ -425,7 +471,11 @@ export default function GovernanceDetail() {
                     }}
                     className="flex-shrink-0"
                   >
-                    {selectedTab ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    {selectedTab ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
 
@@ -434,105 +484,136 @@ export default function GovernanceDetail() {
                     <TabsContent value="live-voting" className="mt-0">
                       {allVotes.length > 0 ? (
                         <div className="space-y-4">
-                          <div className="flex flex-wrap items-center gap-2 justify-center">
-                            <Badge variant="outline" className={getStatusColor(selectedAction.status)}>
+                          <div className="flex flex-wrap items-center justify-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={getStatusColor(selectedAction.status)}
+                            >
                               {selectedAction.status}
                             </Badge>
                             <Badge variant="outline" className="border-border">
                               {selectedAction.type}
                             </Badge>
                           </div>
-                          <div className="flex flex-wrap items-start gap-4 sm:gap-6" style={{ overflow: "visible" }}>
-                          <div className="flex flex-col items-center gap-3">
-                            {allowDRep ? (
-                              drepInfo ? (
-                                <>
-                                  <VoteProgress
-                                    title="DRep Votes"
-                                    yesPercent={drepInfo.yesPercent}
-                                    noPercent={drepInfo.noPercent}
-                                    abstainPercent={drepAbstainStats.percent}
-                                    yesValue={drepYesAda}
-                                    noValue={drepNoAda}
-                                    abstainValue={drepAbstainStats.power}
-                                    valueUnit="ada"
-                                    className="scale-90 md:scale-100 origin-center"
-                                  />
-                                  <RoleLegend
+                          <div
+                            className="flex flex-wrap items-start gap-4 sm:gap-6"
+                            style={{ overflow: "visible" }}
+                          >
+                            <div className="flex flex-col items-center gap-3">
+                              {allowDRep ? (
+                                drepInfo ? (
+                                  <>
+                                    <VoteProgress
+                                      title="DRep Votes"
+                                      yesPercent={drepInfo.yesPercent}
+                                      noPercent={drepInfo.noPercent}
+                                      abstainPercent={drepAbstainStats.percent}
+                                      yesValue={drepYesAda}
+                                      noValue={drepNoAda}
+                                      abstainValue={drepAbstainStats.power}
+                                      valueUnit="ada"
+                                      className="origin-center scale-90 md:scale-100"
+                                    />
+                                    <RoleLegend
+                                      role="DRep"
+                                      yesLabel={formatAdaValue(drepYesAda || 0)}
+                                      noLabel={formatAdaValue(drepNoAda || 0)}
+                                      abstainLabel={formatAdaValue(
+                                        drepAbstainStats.power
+                                      )}
+                                      unit="ADA"
+                                    />
+                                  </>
+                                ) : (
+                                  <RolePlaceholder
                                     role="DRep"
-                                    yesLabel={formatAdaValue(drepYesAda || 0)}
-                                    noLabel={formatAdaValue(drepNoAda || 0)}
-                                    abstainLabel={formatAdaValue(drepAbstainStats.power)}
-                                    unit="ADA"
+                                    message="No on-chain data yet"
                                   />
-                                </>
+                                )
                               ) : (
-                                <RolePlaceholder role="DRep" message="No on-chain data yet" />
-                              )
-                            ) : (
-                              <RolePlaceholder role="DRep" message="Not eligible for this action" />
-                            )}
-                          </div>
-                          <div className="flex flex-col items-center gap-3">
-                            {allowCC ? (
-                              ccInfo ? (
-                                <>
-                                  <VoteProgress
-                                    title="CC"
-                                    yesPercent={ccInfo.yesPercent}
-                                    noPercent={ccInfo.noPercent || 0}
-                                    abstainPercent={ccInfo.abstainPercent ?? ccAbstainStats.percent}
-                                    yesValue={ccYesCount}
-                                    noValue={ccNoCount}
-                                    abstainValue={ccAbstainStats.count}
-                                    valueUnit="count"
-                                    className="scale-90 md:scale-100 origin-center"
-                                  />
-                                  <RoleLegend
+                                <RolePlaceholder
+                                  role="DRep"
+                                  message="Not eligible for this action"
+                                />
+                              )}
+                            </div>
+                            <div className="flex flex-col items-center gap-3">
+                              {allowCC ? (
+                                ccInfo ? (
+                                  <>
+                                    <VoteProgress
+                                      title="CC"
+                                      yesPercent={ccInfo.yesPercent}
+                                      noPercent={ccInfo.noPercent || 0}
+                                      abstainPercent={
+                                        ccInfo.abstainPercent ??
+                                        ccAbstainStats.percent
+                                      }
+                                      yesValue={ccYesCount}
+                                      noValue={ccNoCount}
+                                      abstainValue={ccAbstainStats.count}
+                                      valueUnit="count"
+                                      className="origin-center scale-90 md:scale-100"
+                                    />
+                                    <RoleLegend
+                                      role="CC"
+                                      yesLabel={`${ccYesCount}`}
+                                      noLabel={`${ccNoCount}`}
+                                      abstainLabel={`${ccAbstainStats.count ?? 0}`}
+                                      unit="votes"
+                                    />
+                                  </>
+                                ) : (
+                                  <RolePlaceholder
                                     role="CC"
-                                    yesLabel={`${ccYesCount}`}
-                                    noLabel={`${ccNoCount}`}
-                                    abstainLabel={`${ccAbstainStats.count ?? 0}`}
-                                    unit="votes"
+                                    message="No on-chain data yet"
                                   />
-                                </>
+                                )
                               ) : (
-                                <RolePlaceholder role="CC" message="No on-chain data yet" />
-                              )
-                            ) : (
-                              <RolePlaceholder role="CC" message="Not eligible for this action" />
-                            )}
-                          </div>
-                          <div className="flex flex-col items-center gap-3">
-                            {allowSPO ? (
-                              spoInfo ? (
-                                <>
-                                  <VoteProgress
-                                    title="SPO Votes"
-                                    yesPercent={spoInfo.yesPercent}
-                                    noPercent={spoInfo.noPercent || 0}
-                                    abstainPercent={spoAbstainStats.percent}
-                                    yesValue={spoYesAda}
-                                    noValue={spoNoAda}
-                                    abstainValue={spoAbstainStats.power}
-                                    valueUnit="ada"
-                                    className="scale-90 md:scale-100 origin-center"
-                                  />
-                                  <RoleLegend
+                                <RolePlaceholder
+                                  role="CC"
+                                  message="Not eligible for this action"
+                                />
+                              )}
+                            </div>
+                            <div className="flex flex-col items-center gap-3">
+                              {allowSPO ? (
+                                spoInfo ? (
+                                  <>
+                                    <VoteProgress
+                                      title="SPO Votes"
+                                      yesPercent={spoInfo.yesPercent}
+                                      noPercent={spoInfo.noPercent || 0}
+                                      abstainPercent={spoAbstainStats.percent}
+                                      yesValue={spoYesAda}
+                                      noValue={spoNoAda}
+                                      abstainValue={spoAbstainStats.power}
+                                      valueUnit="ada"
+                                      className="origin-center scale-90 md:scale-100"
+                                    />
+                                    <RoleLegend
+                                      role="SPO"
+                                      yesLabel={formatAdaValue(spoYesAda || 0)}
+                                      noLabel={formatAdaValue(spoNoAda || 0)}
+                                      abstainLabel={formatAdaValue(
+                                        spoAbstainStats.power
+                                      )}
+                                      unit="ADA"
+                                    />
+                                  </>
+                                ) : (
+                                  <RolePlaceholder
                                     role="SPO"
-                                    yesLabel={formatAdaValue(spoYesAda || 0)}
-                                    noLabel={formatAdaValue(spoNoAda || 0)}
-                                    abstainLabel={formatAdaValue(spoAbstainStats.power)}
-                                    unit="ADA"
+                                    message="No on-chain data yet"
                                   />
-                                </>
+                                )
                               ) : (
-                                <RolePlaceholder role="SPO" message="No on-chain data yet" />
-                              )
-                            ) : (
-                              <RolePlaceholder role="SPO" message="Not eligible for this action" />
-                            )}
-                          </div>
+                                <RolePlaceholder
+                                  role="SPO"
+                                  message="Not eligible for this action"
+                                />
+                              )}
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -548,12 +629,17 @@ export default function GovernanceDetail() {
                       <Card className="p-4 sm:p-6">
                         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                           <div className="space-y-1">
-                            <h3 className="text-lg font-semibold">Voting trend</h3>
+                            <h3 className="text-lg font-semibold">
+                              Voting trend
+                            </h3>
                             <p className="text-sm text-muted-foreground">
                               {shouldShowPower
                                 ? "Cumulative voting power (ADA)"
                                 : "Cumulative yes / no / abstain votes"}{" "}
-                              · {curveRoleFilter === "All" ? "All roles" : `${curveRoleFilter} only`}
+                              ·{" "}
+                              {curveRoleFilter === "All"
+                                ? "All roles"
+                                : `${curveRoleFilter} only`}
                             </p>
                             <div className="flex flex-wrap gap-2 pt-1">
                               {curveRoleOptions.map((role) => {
@@ -565,7 +651,7 @@ export default function GovernanceDetail() {
                                     onClick={() => setCurveRoleFilter(role)}
                                     className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
                                       isActive
-                                        ? "bg-foreground text-background border-foreground"
+                                        ? "border-foreground bg-foreground text-background"
                                         : "border-border text-muted-foreground hover:text-foreground"
                                     }`}
                                   >
@@ -577,27 +663,57 @@ export default function GovernanceDetail() {
                           </div>
                           {voteTimelineData.length > 0 && (
                             <div className="text-xs text-muted-foreground">
-                              Updated {voteTimelineData[voteTimelineData.length - 1].label}
+                              Updated{" "}
+                              {
+                                voteTimelineData[voteTimelineData.length - 1]
+                                  .label
+                              }
                             </div>
                           )}
                         </div>
                         {voteTimelineData.length > 0 ? (
-                          <div className="h-[320px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={voteTimelineData} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-border/60" />
-                                <XAxis dataKey="label" tick={{ fontSize: 12 }} minTickGap={24} />
+                          <div className="h-[320px] w-full min-w-0">
+                            <ResponsiveContainer
+                              width="100%"
+                              height="100%"
+                              minWidth={0}
+                              minHeight={0}
+                            >
+                              <LineChart
+                                data={voteTimelineData}
+                                margin={{
+                                  top: 10,
+                                  right: 24,
+                                  left: 0,
+                                  bottom: 0,
+                                }}
+                              >
+                                <CartesianGrid
+                                  strokeDasharray="3 3"
+                                  className="stroke-border/60"
+                                />
+                                <XAxis
+                                  dataKey="label"
+                                  tick={{ fontSize: 12 }}
+                                  minTickGap={24}
+                                />
                                 <YAxis
                                   yAxisId="primary"
                                   allowDecimals={false}
                                   tick={{ fontSize: 12 }}
                                   tickFormatter={
                                     shouldShowPower
-                                      ? (value) => formatAdaValue(value).replace(" ₳", "")
+                                      ? (value) =>
+                                          formatAdaValue(value).replace(
+                                            " ₳",
+                                            ""
+                                          )
                                       : undefined
                                   }
                                 />
-                                <RechartsTooltip content={renderVoteTrendTooltip} />
+                                <RechartsTooltip
+                                  content={renderVoteTrendTooltip}
+                                />
                                 <Legend />
                                 {shouldShowPower ? (
                                   <>
@@ -606,7 +722,9 @@ export default function GovernanceDetail() {
                                       dataKey="yesPower"
                                       stroke={VOTE_COLORS.yes}
                                       strokeWidth={2}
-                                      strokeDasharray={useDashedPowerLines ? "5 4" : undefined}
+                                      strokeDasharray={
+                                        useDashedPowerLines ? "5 4" : undefined
+                                      }
                                       dot={false}
                                       name="Yes Power"
                                       yAxisId="primary"
@@ -616,7 +734,9 @@ export default function GovernanceDetail() {
                                       dataKey="noPower"
                                       stroke={VOTE_COLORS.no}
                                       strokeWidth={2}
-                                      strokeDasharray={useDashedPowerLines ? "5 4" : undefined}
+                                      strokeDasharray={
+                                        useDashedPowerLines ? "5 4" : undefined
+                                      }
                                       dot={false}
                                       name="No Power"
                                       yAxisId="primary"
@@ -627,7 +747,9 @@ export default function GovernanceDetail() {
                                       stroke={VOTE_COLORS.abstain}
                                       strokeOpacity={0.9}
                                       strokeWidth={2}
-                                      strokeDasharray={useDashedPowerLines ? "5 4" : undefined}
+                                      strokeDasharray={
+                                        useDashedPowerLines ? "5 4" : undefined
+                                      }
                                       dot={false}
                                       name="Abstain Power"
                                       yAxisId="primary"
@@ -678,72 +800,122 @@ export default function GovernanceDetail() {
                     <TabsContent value="details" className="mt-0">
                       <div className="space-y-4">
                         {/* Time Until Expiry */}
-                        {selectedAction && (() => {
-                          const submissionEpoch = selectedAction.submissionEpoch;
-                          const expiryEpoch = selectedAction.expiryEpoch || submissionEpoch + 6;
-                          // Estimate current epoch (in real app, fetch from API)
-                          // Using a mock current epoch for now - submissionEpoch + some days
-                          const mockCurrentEpoch = submissionEpoch + 2; // Example: 2 epochs passed
-                          const epochsRemaining = Math.max(0, expiryEpoch - mockCurrentEpoch);
-                          const daysRemaining = epochsRemaining * 5; // 5 days per epoch
-                          const totalEpochs = 6;
-                          const epochsPassed = Math.min(totalEpochs, totalEpochs - epochsRemaining);
-                          const progressPercent = (epochsPassed / totalEpochs) * 100;
+                        {selectedAction &&
+                          (() => {
+                            const submissionEpoch =
+                              selectedAction.submissionEpoch;
+                            const expiryEpoch =
+                              selectedAction.expiryEpoch || submissionEpoch + 6;
+                            // Estimate current epoch (in real app, fetch from API)
+                            // Using a mock current epoch for now - submissionEpoch + some days
+                            const mockCurrentEpoch = submissionEpoch + 2; // Example: 2 epochs passed
+                            const epochsRemaining = Math.max(
+                              0,
+                              expiryEpoch - mockCurrentEpoch
+                            );
+                            const daysRemaining = epochsRemaining * 5; // 5 days per epoch
+                            const totalEpochs = 6;
+                            const epochsPassed = Math.min(
+                              totalEpochs,
+                              totalEpochs - epochsRemaining
+                            );
+                            const progressPercent =
+                              (epochsPassed / totalEpochs) * 100;
 
-                          return (
-                            <>
-                              <div>
-                                <label className="text-xs sm:text-sm text-muted-foreground mb-2 block">Time Until Expiry</label>
-                                <div className="text-xs sm:text-sm text-foreground mb-3">
-                                  {epochsRemaining > 0 ? (
-                                    <>
-                                      {epochsRemaining} {epochsRemaining === 1 ? "epoch" : "epochs"} ({daysRemaining} {daysRemaining === 1 ? "day" : "days"}) remaining
-                                    </>
-                                  ) : (
-                                    <span className="text-destructive">Expired</span>
-                                  )}
+                            return (
+                              <>
+                                <div>
+                                  <label className="mb-2 block text-xs text-muted-foreground sm:text-sm">
+                                    Time Until Expiry
+                                  </label>
+                                  <div className="mb-3 text-xs text-foreground sm:text-sm">
+                                    {epochsRemaining > 0 ? (
+                                      <>
+                                        {epochsRemaining}{" "}
+                                        {epochsRemaining === 1
+                                          ? "epoch"
+                                          : "epochs"}{" "}
+                                        ({daysRemaining}{" "}
+                                        {daysRemaining === 1 ? "day" : "days"})
+                                        remaining
+                                      </>
+                                    ) : (
+                                      <span className="text-destructive">
+                                        Expired
+                                      </span>
+                                    )}
+                                  </div>
+                                  <Progress
+                                    value={progressPercent}
+                                    className="mb-3 h-2"
+                                    variant={
+                                      epochsRemaining === 0
+                                        ? "no"
+                                        : epochsRemaining <= 2
+                                          ? "no"
+                                          : "default"
+                                    }
+                                  />
+                                  <div className="grid grid-cols-3 gap-4 text-center text-xs">
+                                    <div>
+                                      <div className="mb-1 text-muted-foreground">
+                                        Submission
+                                      </div>
+                                      <div className="font-semibold">
+                                        Epoch {submissionEpoch}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="mb-1 text-muted-foreground">
+                                        Current
+                                      </div>
+                                      <div className="font-semibold">
+                                        Epoch {mockCurrentEpoch}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="mb-1 text-muted-foreground">
+                                        Expiry
+                                      </div>
+                                      <div className="font-semibold">
+                                        Epoch {expiryEpoch}
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
-                                <Progress 
-                                  value={progressPercent} 
-                                  className="h-2 mb-3"
-                                  variant={epochsRemaining === 0 ? "no" : epochsRemaining <= 2 ? "no" : "default"}
-                                />
-                                <div className="grid grid-cols-3 gap-4 text-center text-xs">
-                                  <div>
-                                    <div className="text-muted-foreground mb-1">Submission</div>
-                                    <div className="font-semibold">Epoch {submissionEpoch}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-muted-foreground mb-1">Current</div>
-                                    <div className="font-semibold">Epoch {mockCurrentEpoch}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-muted-foreground mb-1">Expiry</div>
-                                    <div className="font-semibold">Epoch {expiryEpoch}</div>
-                                  </div>
-                                </div>
-                              </div>
-                            </>
-                          );
-                        })()}
+                              </>
+                            );
+                          })()}
                         {/* Vote Metric */}
                         <div>
-                          <label className="text-xs sm:text-sm text-muted-foreground mb-2 block">Vote</label>
+                          <label className="mb-2 block text-xs text-muted-foreground sm:text-sm">
+                            Vote
+                          </label>
                           <div className="flex flex-col gap-1">
-                            <div className="text-xs sm:text-sm text-foreground">Yes</div>
-                            <div className="text-xs sm:text-sm text-foreground">No</div>
-                            <div className="text-xs sm:text-sm text-foreground">Abstain</div>
+                            <div className="text-xs text-foreground sm:text-sm">
+                              Yes
+                            </div>
+                            <div className="text-xs text-foreground sm:text-sm">
+                              No
+                            </div>
+                            <div className="text-xs text-foreground sm:text-sm">
+                              Abstain
+                            </div>
                           </div>
                         </div>
-                          <div>
-                            <label className="text-xs sm:text-sm text-muted-foreground mb-2 block">Governance Action ID</label>
-                            <code className="text-xs sm:text-sm text-muted-foreground bg-secondary px-2 sm:px-3 py-1 rounded font-mono break-all block">
-                              {selectedAction.id}
-                            </code>
-                          </div>
                         <div>
-                          <label className="text-xs sm:text-sm text-muted-foreground mb-2 block">Transaction Hash</label>
-                          <code className="text-xs sm:text-sm text-muted-foreground bg-secondary px-2 sm:px-3 py-1 rounded font-mono break-all block">
+                          <label className="mb-2 block text-xs text-muted-foreground sm:text-sm">
+                            Governance Action ID
+                          </label>
+                          <code className="block break-all rounded bg-secondary px-2 py-1 font-mono text-xs text-muted-foreground sm:px-3 sm:text-sm">
+                            {selectedAction.id}
+                          </code>
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-xs text-muted-foreground sm:text-sm">
+                            Transaction Hash
+                          </label>
+                          <code className="block break-all rounded bg-secondary px-2 py-1 font-mono text-xs text-muted-foreground sm:px-3 sm:text-sm">
                             {selectedAction.txHash}
                           </code>
                         </div>
@@ -757,7 +929,10 @@ export default function GovernanceDetail() {
 
           {/* Voting Records Table */}
           {allVotes.length > 0 && (
-            <div className={`mb-6 transition-opacity duration-300 delay-150 ${contentVisible ? "opacity-100" : "opacity-0"}`} style={{ overflow: "visible" }}>
+            <div
+              className={`mb-6 transition-opacity delay-150 duration-300 ${contentVisible ? "opacity-100" : "opacity-0"}`}
+              style={{ overflow: "visible" }}
+            >
               <VotingRecords
                 votes={allVotes}
                 proposalId={selectedAction.id}
@@ -799,19 +974,25 @@ function VoteTrendTooltip({
   const rows = [
     {
       label: "Yes",
-      value: showPower ? formatAdaValue(point.yesPower) : `${point.yesCount.toLocaleString()} votes`,
+      value: showPower
+        ? formatAdaValue(point.yesPower)
+        : `${point.yesCount.toLocaleString()} votes`,
       color: VOTE_COLORS.yes,
       border: "transparent",
     },
     {
       label: "No",
-      value: showPower ? formatAdaValue(point.noPower) : `${point.noCount.toLocaleString()} votes`,
+      value: showPower
+        ? formatAdaValue(point.noPower)
+        : `${point.noCount.toLocaleString()} votes`,
       color: VOTE_COLORS.no,
       border: "transparent",
     },
     {
       label: "Abstain",
-      value: showPower ? formatAdaValue(point.abstainPower) : `${point.abstainCount.toLocaleString()} votes`,
+      value: showPower
+        ? formatAdaValue(point.abstainPower)
+        : `${point.abstainCount.toLocaleString()} votes`,
       color: VOTE_COLORS.abstain,
       border: "rgba(148, 163, 184, 0.85)",
     },
@@ -819,10 +1000,15 @@ function VoteTrendTooltip({
 
   return (
     <div className="rounded-md border bg-background/95 px-3 py-2 text-xs shadow-md">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
       <div className="mt-2 space-y-1.5">
         {rows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between gap-4">
+          <div
+            key={row.label}
+            className="flex items-center justify-between gap-4"
+          >
             <div className="flex items-center gap-2">
               <span
                 className="h-2.5 w-2.5 rounded-full border"
@@ -830,7 +1016,9 @@ function VoteTrendTooltip({
               />
               <span className="font-semibold text-foreground">{row.label}</span>
             </div>
-            <div className="font-mono text-[11px] text-muted-foreground">{row.value}</div>
+            <div className="font-mono text-[11px] text-muted-foreground">
+              {row.value}
+            </div>
           </div>
         ))}
       </div>
@@ -852,9 +1040,24 @@ function RoleLegend({
   unit: string;
 }) {
   const items = [
-    { label: "Yes", value: yesLabel, color: VOTE_COLORS.yes, border: "transparent" },
-    { label: "No", value: noLabel, color: VOTE_COLORS.no, border: "transparent" },
-    { label: "Abstain", value: abstainLabel, color: VOTE_COLORS.abstain, border: "rgba(148, 163, 184, 0.85)" },
+    {
+      label: "Yes",
+      value: yesLabel,
+      color: VOTE_COLORS.yes,
+      border: "transparent",
+    },
+    {
+      label: "No",
+      value: noLabel,
+      color: VOTE_COLORS.no,
+      border: "transparent",
+    },
+    {
+      label: "Abstain",
+      value: abstainLabel,
+      color: VOTE_COLORS.abstain,
+      border: "rgba(148, 163, 184, 0.85)",
+    },
   ];
 
   return (
@@ -865,15 +1068,25 @@ function RoleLegend({
       </div>
       <div className="space-y-1.5">
         {items.map((item) => (
-          <div key={item.label} className="flex items-center justify-between gap-3">
+          <div
+            key={item.label}
+            className="flex items-center justify-between gap-3"
+          >
             <div className="flex items-center gap-2">
               <span
                 className="h-2.5 w-2.5 rounded-full border"
-                style={{ backgroundColor: item.color, borderColor: item.border }}
+                style={{
+                  backgroundColor: item.color,
+                  borderColor: item.border,
+                }}
               />
-              <span className="font-semibold text-foreground">{item.label}</span>
+              <span className="font-semibold text-foreground">
+                {item.label}
+              </span>
             </div>
-            <span className="font-mono text-[11px] text-muted-foreground">{item.value}</span>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {item.value}
+            </span>
           </div>
         ))}
       </div>
@@ -889,5 +1102,3 @@ function RolePlaceholder({ role, message }: { role: string; message: string }) {
     </div>
   );
 }
-
-
