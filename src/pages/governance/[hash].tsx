@@ -12,13 +12,14 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { VoteProgress } from "@/components/ui/vote-progress";
 import { Progress } from "@/components/ui/progress";
 import { VotingRecords } from "@/components/VotingRecords";
 import { BubbleMap } from "@/components/BubbleMap";
 import { VoteOnProposal } from "@/components/governance";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { loadGovernanceActionDetail } from "@/store/governanceSlice";
-import { ArrowLeft, Twitter } from "lucide-react";
+import { ArrowLeft, Twitter, ChevronDown, ChevronRight } from "lucide-react";
 import type { GovernanceActionDetail, VoterType } from "@/types/governance";
 import {
   ResponsiveContainer,
@@ -41,6 +42,8 @@ import {
   canRoleVoteOnAction,
   getEligibleRoles,
 } from "@/lib/governanceVotingEligibility";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { parseNumeric, deriveCcAbstainCount } from "@/lib/voteMath";
 
 /**
  * Parse proposal hash (txHash:certIndex format) into separate components
@@ -211,6 +214,7 @@ export default function GovernanceDetail() {
     useState<boolean>(false);
   const [curveRoleFilter, setCurveRoleFilter] =
     useState<RoleFilter>("All");
+  const [selectedTab, setSelectedTab] = useState<string | null>("live-voting");
 
   useEffect(() => {
     if (typeof hash === "string") {
@@ -344,6 +348,83 @@ export default function GovernanceDetail() {
   const useDashedPowerLines =
     shouldShowPower && curveRoleFilter !== "DRep";
 
+  const drepAbstainStats = useMemo(() => {
+    const drepVotes = allVotes.filter((v) => v.voterType === "DRep");
+    const totalPower = drepVotes.reduce(
+      (sum, v) => sum + (v.votingPowerAda || 0),
+      0
+    );
+    if (totalPower <= 0) {
+      return { percent: 0, power: 0 };
+    }
+    const abstainPower = drepVotes
+      .filter((v) => v.vote === "Abstain")
+      .reduce((sum, v) => sum + (v.votingPowerAda || 0), 0);
+    return {
+      percent: (abstainPower / totalPower) * 100,
+      power: abstainPower,
+    };
+  }, [allVotes]);
+
+  const spoAbstainStats = useMemo(() => {
+    const spoVotes = allVotes.filter((v) => v.voterType === "SPO");
+    const totalPower = spoVotes.reduce(
+      (sum, v) => sum + (v.votingPowerAda || 0),
+      0
+    );
+    if (totalPower <= 0) {
+      return { percent: 0, power: 0 };
+    }
+    const abstainPower = spoVotes
+      .filter((v) => v.vote === "Abstain")
+      .reduce((sum, v) => sum + (v.votingPowerAda || 0), 0);
+    return {
+      percent: (abstainPower / totalPower) * 100,
+      power: abstainPower,
+    };
+  }, [allVotes]);
+
+  const ccAbstainStats = useMemo(() => {
+    // When selectedAction is not yet loaded, return safe defaults
+    if (!selectedAction) {
+      return { percent: 0, count: 0, yesCount: 0, noCount: 0 };
+    }
+
+    const ccVotes = allVotes.filter((v) => v.voterType === "CC");
+
+    if (ccVotes.length === 0) {
+      const yesCountInner = selectedAction.cc?.yesCount ?? 0;
+      const noCountInner = selectedAction.cc?.noCount ?? 0;
+      const percent = selectedAction.cc?.abstainPercent ?? 0;
+      const derivedAbstain =
+        deriveCcAbstainCount(
+          yesCountInner,
+          noCountInner,
+          selectedAction.cc?.yesPercent,
+          selectedAction.cc?.noPercent,
+          percent
+        ) ?? 0;
+
+      return {
+        percent,
+        count: derivedAbstain,
+        yesCount: yesCountInner,
+        noCount: noCountInner,
+      };
+    }
+
+    const yesCountInner = ccVotes.filter((v) => v.vote === "Yes").length;
+    const noCountInner = ccVotes.filter((v) => v.vote === "No").length;
+    const abstainCount = ccVotes.filter((v) => v.vote === "Abstain").length;
+
+    return {
+      percent: (abstainCount / ccVotes.length) * 100,
+      count: abstainCount,
+      yesCount: yesCountInner,
+      noCount: noCountInner,
+    };
+  }, [allVotes, selectedAction]);
+
   // Parse proposal hash outside JSX to avoid IIFE causing component remount
   const parsedProposalHash = selectedAction?.hash
     ? parseProposalHash(selectedAction.hash)
@@ -447,6 +528,17 @@ export default function GovernanceDetail() {
   const allowCC =
     canRoleVoteOnAction(selectedAction.type, "CC") &&
     !isCcNotApplicable(selectedAction);
+
+  const drepInfo = allowDRep ? selectedAction.drep : undefined;
+  const spoInfo = allowSPO ? selectedAction.spo : undefined;
+  const ccInfo = allowCC ? selectedAction.cc : undefined;
+
+  const drepYesAda = parseNumeric(drepInfo?.yesAda);
+  const drepNoAda = parseNumeric(drepInfo?.noAda);
+  const spoYesAda = parseNumeric(spoInfo?.yesAda);
+  const spoNoAda = parseNumeric(spoInfo?.noAda);
+  const ccYesCount = ccAbstainStats.yesCount ?? ccInfo?.yesCount ?? 0;
+  const ccNoCount = ccAbstainStats.noCount ?? ccInfo?.noCount ?? 0;
 
   const handleTwitterShare = () => {
     const url =
@@ -574,19 +666,472 @@ export default function GovernanceDetail() {
 
           {/* Main Grid: 2/3 Left, 1/3 Right */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Left Column - Main Content */}
+            {/* Left Column - Tabs for donuts, bubble map, curves, details */}
             <div className="space-y-6 lg:col-span-2">
-              {/* Full Description Card (if preview was truncated) */}
-              {!descriptionPreview && (
-                <Card className="p-6">
-                  <h2 className="mb-4 text-xl font-semibold">Description</h2>
-                  <div className="whitespace-pre-wrap leading-relaxed text-foreground/90">
-                    {selectedAction.description || "No description provided."}
-                  </div>
-                </Card>
-              )}
+              <Card className="p-4 sm:p-6">
+                <Tabs
+                  value={selectedTab || undefined}
+                  onValueChange={setSelectedTab}
+                  className="w-full"
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <TabsList className="flex-1 flex-wrap justify-start gap-1 bg-transparent p-0">
+                        <TabsTrigger value="live-voting">Live Voting</TabsTrigger>
+                        <TabsTrigger value="bubble-map">Bubble Map</TabsTrigger>
+                        <TabsTrigger value="curves">Curves</TabsTrigger>
+                        <TabsTrigger value="details">Details</TabsTrigger>
+                      </TabsList>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (selectedTab) {
+                            setSelectedTab(null);
+                          } else {
+                            setSelectedTab("live-voting");
+                          }
+                        }}
+                        className="flex-shrink-0"
+                      >
+                        {selectedTab ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
 
-              {/* Rationale Card */}
+                    {selectedTab && (
+                      <>
+                        {/* Live voting donuts */}
+                        <TabsContent value="live-voting" className="mt-0">
+                          {allVotes.length > 0 ? (
+                            <div className="space-y-4">
+                              <div className="flex flex-wrap items-center justify-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className={getStatusColor(selectedAction.status)}
+                                >
+                                  {selectedAction.status}
+                                </Badge>
+                                <Badge variant="outline" className="border-border">
+                                  {selectedAction.type}
+                                </Badge>
+                              </div>
+                              <div
+                                className="flex flex-wrap items-start gap-4 sm:gap-6"
+                                style={{ overflow: "visible" }}
+                              >
+                                <div className="flex flex-col items-center gap-3">
+                                  {allowDRep ? (
+                                    drepInfo ? (
+                                      <>
+                                        <VoteProgress
+                                          title="DRep Votes"
+                                          yesPercent={drepInfo.yesPercent}
+                                          noPercent={drepInfo.noPercent}
+                                          abstainPercent={drepAbstainStats.percent}
+                                          yesValue={drepYesAda}
+                                          noValue={drepNoAda}
+                                          abstainValue={drepAbstainStats.power}
+                                          valueUnit="ada"
+                                          className="origin-center scale-90 md:scale-100"
+                                        />
+                                        <RoleLegend
+                                          role="DRep"
+                                          yesLabel={formatAdaValue(drepYesAda || 0)}
+                                          noLabel={formatAdaValue(drepNoAda || 0)}
+                                          abstainLabel={formatAdaValue(
+                                            drepAbstainStats.power
+                                          )}
+                                          unit="ADA"
+                                        />
+                                      </>
+                                    ) : (
+                                      <RolePlaceholder
+                                        role="DRep"
+                                        message="No on-chain data yet"
+                                      />
+                                    )
+                                  ) : (
+                                    <RolePlaceholder
+                                      role="DRep"
+                                      message="Not eligible for this action"
+                                    />
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-center gap-3">
+                                  {allowCC ? (
+                                    ccInfo ? (
+                                      <>
+                                        <VoteProgress
+                                          title="CC"
+                                          yesPercent={ccInfo.yesPercent}
+                                          noPercent={ccInfo.noPercent || 0}
+                                          abstainPercent={
+                                            ccInfo.abstainPercent ??
+                                            ccAbstainStats.percent
+                                          }
+                                          yesValue={ccYesCount}
+                                          noValue={ccNoCount}
+                                          abstainValue={ccAbstainStats.count}
+                                          valueUnit="count"
+                                          className="origin-center scale-90 md:scale-100"
+                                        />
+                                        <RoleLegend
+                                          role="CC"
+                                          yesLabel={`${ccYesCount}`}
+                                          noLabel={`${ccNoCount}`}
+                                          abstainLabel={`${ccAbstainStats.count ?? 0}`}
+                                          unit="votes"
+                                        />
+                                      </>
+                                    ) : (
+                                      <RolePlaceholder
+                                        role="CC"
+                                        message="No on-chain data yet"
+                                      />
+                                    )
+                                  ) : (
+                                    <RolePlaceholder
+                                      role="CC"
+                                      message="Not eligible for this action"
+                                    />
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-center gap-3">
+                                  {allowSPO ? (
+                                    spoInfo ? (
+                                      <>
+                                        <VoteProgress
+                                          title="SPO Votes"
+                                          yesPercent={spoInfo.yesPercent}
+                                          noPercent={spoInfo.noPercent || 0}
+                                          abstainPercent={spoAbstainStats.percent}
+                                          yesValue={spoYesAda}
+                                          noValue={spoNoAda}
+                                          abstainValue={spoAbstainStats.power}
+                                          valueUnit="ada"
+                                          className="origin-center scale-90 md:scale-100"
+                                        />
+                                        <RoleLegend
+                                          role="SPO"
+                                          yesLabel={formatAdaValue(spoYesAda || 0)}
+                                          noLabel={formatAdaValue(spoNoAda || 0)}
+                                          abstainLabel={formatAdaValue(
+                                            spoAbstainStats.power
+                                          )}
+                                          unit="ADA"
+                                        />
+                                      </>
+                                    ) : (
+                                      <RolePlaceholder
+                                        role="SPO"
+                                        message="No on-chain data yet"
+                                      />
+                                    )
+                                  ) : (
+                                    <RolePlaceholder
+                                      role="SPO"
+                                      message="Not eligible for this action"
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                              No voting activity yet.
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        {/* Bubble map */}
+                        <TabsContent value="bubble-map" className="mt-0">
+                          {allVotes.length > 0 ? (
+                            <BubbleMap votes={allVotes} />
+                          ) : (
+                            <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+                              No voting activity yet.
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        {/* Curves */}
+                        <TabsContent value="curves" className="mt-0">
+                          <Card className="p-4 sm:p-6">
+                            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="space-y-1">
+                                <h3 className="text-lg font-semibold">Voting trend</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  {shouldShowPower
+                                    ? "Cumulative voting power (ADA)"
+                                    : "Cumulative yes / no / abstain votes"}{" "}
+                                  · {" "}
+                                  {curveRoleFilter === "All"
+                                    ? "All roles"
+                                    : `${curveRoleFilter} only`}
+                                </p>
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {curveRoleOptions.map((role) => {
+                                    const isActive = curveRoleFilter === role;
+                                    return (
+                                      <button
+                                        key={role}
+                                        type="button"
+                                        onClick={() => setCurveRoleFilter(role)}
+                                        className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
+                                          isActive
+                                            ? "border-foreground bg-foreground text-background"
+                                            : "border-border text-muted-foreground hover:text-foreground"
+                                        }`}
+                                      >
+                                        {role === "All" ? "All Roles" : role}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              {voteTimelineData.length > 0 && (
+                                <div className="text-xs text-muted-foreground">
+                                  Updated{" "}
+                                  {
+                                    voteTimelineData[voteTimelineData.length - 1]
+                                      .label
+                                  }
+                                </div>
+                              )}
+                            </div>
+                            {voteTimelineData.length > 0 ? (
+                              <div className="h-[320px] w-full min-w-0">
+                                <ResponsiveContainer
+                                  width="100%"
+                                  height="100%"
+                                  minWidth={0}
+                                  minHeight={0}
+                                >
+                                  <LineChart
+                                    data={voteTimelineData}
+                                    margin={{
+                                      top: 10,
+                                      right: 24,
+                                      left: 0,
+                                      bottom: 0,
+                                    }}
+                                  >
+                                    <CartesianGrid
+                                      strokeDasharray="3 3"
+                                      className="stroke-border/60"
+                                    />
+                                    <XAxis
+                                      dataKey="label"
+                                      tick={{ fontSize: 12 }}
+                                      minTickGap={24}
+                                    />
+                                    <YAxis
+                                      yAxisId="primary"
+                                      allowDecimals={false}
+                                      tick={{ fontSize: 12 }}
+                                      tickFormatter={
+                                        shouldShowPower
+                                          ? (value) =>
+                                              formatAdaValue(value).replace(
+                                                " ₳",
+                                                ""
+                                              )
+                                          : undefined
+                                      }
+                                    />
+                                    <RechartsTooltip
+                                      content={renderVoteTrendTooltip}
+                                    />
+                                    <Legend />
+                                    {shouldShowPower ? (
+                                      <>
+                                        <Line
+                                          type="monotone"
+                                          dataKey="yesPower"
+                                          stroke={VOTE_COLORS.yes}
+                                          strokeWidth={2}
+                                          strokeDasharray={
+                                            useDashedPowerLines ? "5 4" : undefined
+                                          }
+                                          dot={false}
+                                          name="Yes Power"
+                                          yAxisId="primary"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="noPower"
+                                          stroke={VOTE_COLORS.no}
+                                          strokeWidth={2}
+                                          strokeDasharray={
+                                            useDashedPowerLines ? "5 4" : undefined
+                                          }
+                                          dot={false}
+                                          name="No Power"
+                                          yAxisId="primary"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="abstainPower"
+                                          stroke={VOTE_COLORS.abstain}
+                                          strokeOpacity={0.9}
+                                          strokeWidth={2}
+                                          strokeDasharray={
+                                            useDashedPowerLines ? "5 4" : undefined
+                                          }
+                                          dot={false}
+                                          name="Abstain Power"
+                                          yAxisId="primary"
+                                        />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Line
+                                          type="monotone"
+                                          dataKey="yesCount"
+                                          stroke={VOTE_COLORS.yes}
+                                          strokeWidth={2}
+                                          dot={false}
+                                          name="Yes Votes"
+                                          yAxisId="primary"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="noCount"
+                                          stroke={VOTE_COLORS.no}
+                                          strokeWidth={2}
+                                          dot={false}
+                                          name="No Votes"
+                                          yAxisId="primary"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="abstainCount"
+                                          stroke={VOTE_COLORS.abstain}
+                                          strokeOpacity={0.9}
+                                          strokeWidth={2}
+                                          dot={false}
+                                          name="Abstain Votes"
+                                          yAxisId="primary"
+                                        />
+                                      </>
+                                    )}
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              </div>
+                            ) : (
+                              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+                                Not enough voting data yet.
+                              </div>
+                            )}
+                          </Card>
+                        </TabsContent>
+
+                        {/* Details */}
+                        <TabsContent value="details" className="mt-0">
+                          <div className="space-y-4">
+                            {/* Time Until Expiry */}
+                            {selectedAction && (() => {
+                              const submissionEpoch = selectedAction.submissionEpoch;
+                              const expiryEpoch =
+                                selectedAction.expiryEpoch || submissionEpoch + 6;
+                              const mockCurrentEpoch = submissionEpoch + 2;
+                              const epochsRemaining = Math.max(
+                                0,
+                                expiryEpoch - mockCurrentEpoch
+                              );
+                              const daysRemaining = epochsRemaining * 5;
+                              const totalEpochs = 6;
+                              const epochsPassed = Math.min(
+                                totalEpochs,
+                                totalEpochs - epochsRemaining
+                              );
+                              const progressPercent =
+                                (epochsPassed / totalEpochs) * 100;
+
+                              return (
+                                <div>
+                                  <label className="mb-2 block text-xs text-muted-foreground sm:text-sm">
+                                    Time Until Expiry
+                                  </label>
+                                  <div className="mb-3 text-xs text-foreground sm:text-sm">
+                                    {epochsRemaining > 0 ? (
+                                      <>
+                                        {epochsRemaining}{" "}
+                                        {epochsRemaining === 1
+                                          ? "epoch"
+                                          : "epochs"}{" "}
+                                        ({daysRemaining}{" "}
+                                        {daysRemaining === 1 ? "day" : "days"})
+                                        remaining
+                                      </>
+                                    ) : (
+                                      <span className="text-destructive">
+                                        Expired
+                                      </span>
+                                    )}
+                                  </div>
+                                  <Progress
+                                    value={progressPercent}
+                                    className="mb-3 h-2"
+                                  />
+                                  <div className="grid grid-cols-3 gap-4 text-center text-xs">
+                                    <div>
+                                      <div className="mb-1 text-muted-foreground">
+                                        Submission
+                                      </div>
+                                      <div className="font-semibold">
+                                        Epoch {submissionEpoch}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="mb-1 text-muted-foreground">
+                                        Current
+                                      </div>
+                                      <div className="font-semibold">
+                                        Epoch {mockCurrentEpoch}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="mb-1 text-muted-foreground">
+                                        Expiry
+                                      </div>
+                                      <div className="font-semibold">
+                                        Epoch {expiryEpoch}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                            <div>
+                              <label className="mb-2 block text-xs text-muted-foreground sm:text-sm">
+                                Governance Action ID
+                              </label>
+                              <code className="block break-all rounded bg-secondary px-2 py-1 font-mono text-xs text-muted-foreground sm:px-3 sm:text-sm">
+                                {selectedAction.hash}
+                              </code>
+                            </div>
+                            <div>
+                              <label className="mb-2 block text-xs text-muted-foreground sm:text-sm">
+                                Transaction Hash
+                              </label>
+                              <code className="block break-all rounded bg-secondary px-2 py-1 font-mono text-xs text-muted-foreground sm:px-3 sm:text-sm">
+                                {selectedAction.txHash}
+                              </code>
+                            </div>
+                          </div>
+                        </TabsContent>
+                      </>
+                    )}
+                  </div>
+                </Tabs>
+              </Card>
+
+              {/* Rationale Card (outside tabs, same column) */}
               {selectedAction.rationale && (
                 <Card className="p-6">
                   <h2 className="mb-4 text-xl font-semibold">Rationale</h2>
@@ -595,189 +1140,9 @@ export default function GovernanceDetail() {
                   </div>
                 </Card>
               )}
-
-              {/* Bubble Map */}
-              {allVotes.length > 0 && (
-                <Card className="p-4 sm:p-6">
-                  <h2 className="mb-4 text-xl font-semibold">Bubble Map</h2>
-                  <BubbleMap votes={allVotes} />
-                </Card>
-              )}
-
-              {/* Voting Trend Chart */}
-              {allVotes.length > 0 && (
-                <Card className="p-4 sm:p-6">
-                  <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-1">
-                      <h3 className="text-lg font-semibold">Voting trend</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {shouldShowPower
-                          ? "Cumulative voting power (ADA)"
-                          : "Cumulative yes / no / abstain votes"}{" "}
-                        · {" "}
-                        {curveRoleFilter === "All"
-                          ? "All roles"
-                          : `${curveRoleFilter} only`}
-                      </p>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {curveRoleOptions.map((role) => {
-                          const isActive = curveRoleFilter === role;
-                          return (
-                            <button
-                              key={role}
-                              type="button"
-                              onClick={() => setCurveRoleFilter(role)}
-                              className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
-                                isActive
-                                  ? "border-foreground bg-foreground text-background"
-                                  : "border-border text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              {role === "All" ? "All Roles" : role}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    {voteTimelineData.length > 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        Updated{" "}
-                        {
-                          voteTimelineData[voteTimelineData.length - 1]
-                            .label
-                        }
-                      </div>
-                    )}
-                  </div>
-                  {voteTimelineData.length > 0 ? (
-                    <div className="h-[320px] w-full min-w-0">
-                      <ResponsiveContainer
-                        width="100%"
-                        height="100%"
-                        minWidth={0}
-                        minHeight={0}
-                      >
-                        <LineChart
-                          data={voteTimelineData}
-                          margin={{
-                            top: 10,
-                            right: 24,
-                            left: 0,
-                            bottom: 0,
-                          }}
-                        >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            className="stroke-border/60"
-                          />
-                          <XAxis
-                            dataKey="label"
-                            tick={{ fontSize: 12 }}
-                            minTickGap={24}
-                          />
-                          <YAxis
-                            yAxisId="primary"
-                            allowDecimals={false}
-                            tick={{ fontSize: 12 }}
-                            tickFormatter={
-                              shouldShowPower
-                                ? (value) =>
-                                    formatAdaValue(value).replace(
-                                      " ₳",
-                                      ""
-                                    )
-                                : undefined
-                            }
-                          />
-                          <RechartsTooltip
-                            content={renderVoteTrendTooltip}
-                          />
-                          <Legend />
-                          {shouldShowPower ? (
-                            <>
-                              <Line
-                                type="monotone"
-                                dataKey="yesPower"
-                                stroke={VOTE_COLORS.yes}
-                                strokeWidth={2}
-                                strokeDasharray={
-                                  useDashedPowerLines ? "5 4" : undefined
-                                }
-                                dot={false}
-                                name="Yes Power"
-                                yAxisId="primary"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="noPower"
-                                stroke={VOTE_COLORS.no}
-                                strokeWidth={2}
-                                strokeDasharray={
-                                  useDashedPowerLines ? "5 4" : undefined
-                                }
-                                dot={false}
-                                name="No Power"
-                                yAxisId="primary"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="abstainPower"
-                                stroke={VOTE_COLORS.abstain}
-                                strokeOpacity={0.9}
-                                strokeWidth={2}
-                                strokeDasharray={
-                                  useDashedPowerLines ? "5 4" : undefined
-                                }
-                                dot={false}
-                                name="Abstain Power"
-                                yAxisId="primary"
-                              />
-                            </>
-                          ) : (
-                            <>
-                              <Line
-                                type="monotone"
-                                dataKey="yesCount"
-                                stroke={VOTE_COLORS.yes}
-                                strokeWidth={2}
-                                dot={false}
-                                name="Yes Votes"
-                                yAxisId="primary"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="noCount"
-                                stroke={VOTE_COLORS.no}
-                                strokeWidth={2}
-                                dot={false}
-                                name="No Votes"
-                                yAxisId="primary"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="abstainCount"
-                                stroke={VOTE_COLORS.abstain}
-                                strokeOpacity={0.9}
-                                strokeWidth={2}
-                                dot={false}
-                                name="Abstain Votes"
-                                yAxisId="primary"
-                              />
-                            </>
-                          )}
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : (
-                    <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
-                      Not enough voting data yet.
-                    </div>
-                  )}
-                </Card>
-              )}
             </div>
 
-            {/* Right Column - Sidebar */}
+            {/* Right Column - Sidebar (voting summary and voting widget) */}
             <div className="space-y-6">
               {/* Vote on Proposal Card */}
               {parsedProposalHash && (
@@ -864,8 +1229,7 @@ export default function GovernanceDetail() {
                       <div className="mb-2 flex justify-between">
                         <span className="text-sm text-destructive">
                           No:{" "}
-                          {selectedAction.spoNoPercent?.toFixed(1) || "0.0"}
-                          %
+                          {selectedAction.spoNoPercent?.toFixed(1) || "0.0"}%
                         </span>
                         <span className="text-sm text-muted-foreground">
                           {selectedAction.spoNoAda || "0"} ₳
@@ -1063,6 +1427,83 @@ function VoteTrendTooltip({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function RoleLegend({
+  role,
+  yesLabel,
+  noLabel,
+  abstainLabel,
+  unit,
+}: {
+  role: string;
+  yesLabel: string;
+  noLabel: string;
+  abstainLabel: string;
+  unit: string;
+}) {
+  const items = [
+    {
+      label: "Yes",
+      value: yesLabel,
+      color: VOTE_COLORS.yes,
+      border: "transparent",
+    },
+    {
+      label: "No",
+      value: noLabel,
+      color: VOTE_COLORS.no,
+      border: "transparent",
+    },
+    {
+      label: "Abstain",
+      value: abstainLabel,
+      color: VOTE_COLORS.abstain,
+      border: "rgba(148, 163, 184, 0.85)",
+    },
+  ];
+
+  return (
+    <div className="w-full max-w-[200px] rounded-xl border border-border/60 bg-card/40 px-3 py-2 text-xs shadow-sm">
+      <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+        <span className="font-semibold">{role}</span>
+        <span>{unit}</span>
+      </div>
+      <div className="space-y-1.5">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 rounded-full border"
+                style={{
+                  backgroundColor: item.color,
+                  borderColor: item.border,
+                }}
+              />
+              <span className="font-semibold text-foreground">
+                {item.label}
+              </span>
+            </div>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {item.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RolePlaceholder({ role, message }: { role: string; message: string }) {
+  return (
+    <div className="flex h-full min-h-[180px] w-full max-w-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-card/30 px-4 py-6 text-center text-xs text-muted-foreground">
+      <span className="mb-1 font-semibold text-foreground">{role}</span>
+      <span>{message}</span>
     </div>
   );
 }
