@@ -1,6 +1,14 @@
 export const parseNumeric = (value?: string | number | null) => {
   if (value === null || value === undefined) return undefined;
-  const numeric = typeof value === "number" ? value : Number(value);
+
+  let cleaned: string | number = value;
+
+  // Support formatted numeric strings (e.g. "12,345.6")
+  if (typeof cleaned === "string") {
+    cleaned = cleaned.replace(/,/g, "");
+  }
+
+  const numeric = typeof cleaned === "number" ? cleaned : Number(cleaned);
   return Number.isFinite(numeric) ? numeric : undefined;
 };
 

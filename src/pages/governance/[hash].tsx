@@ -43,7 +43,7 @@ import {
   getEligibleRoles,
 } from "@/lib/governanceVotingEligibility";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { parseNumeric, deriveCcAbstainCount } from "@/lib/voteMath";
+import { parseNumeric, deriveAbstainValue } from "@/lib/voteMath";
 
 /**
  * Parse proposal hash (txHash:certIndex format) into separate components
@@ -125,6 +125,17 @@ function isCcNotApplicable(action: GovernanceActionDetail): boolean {
   ) {
     return true;
   }
+  // Prefer explicit threshold from backend when available:
+  // if ccThreshold is null, CC is not eligible to vote;
+  // if it is a number, CC is eligible regardless of type.
+  if (!isLegacyAction(action.hash) && action.threshold) {
+    if (action.threshold.ccThreshold === null) {
+      return true;
+    }
+    if (typeof action.threshold.ccThreshold === "number") {
+      return false;
+    }
+  }
   if (!isLegacyAction(action.hash)) {
     return CC_NOT_APPLICABLE_TYPES.includes(action.type);
   }
@@ -149,6 +160,13 @@ function isSpoNotApplicable(action: GovernanceActionDetail): boolean {
     )
   ) {
     return true;
+  }
+  // For non-legacy actions, prefer explicit threshold from backend:
+  // if spoThreshold is null, SPOs are not eligible to vote.
+  if (!isLegacyAction(action.hash) && action.threshold) {
+    if (action.threshold.spoThreshold === null) {
+      return true;
+    }
   }
   if (!isLegacyAction(action.hash)) {
     return SPO_NOT_APPLICABLE_TYPES.includes(action.type);
@@ -356,17 +374,36 @@ export default function GovernanceDetail() {
       (sum, v) => sum + (v.votingPowerAda || 0),
       0
     );
-    if (totalPower <= 0) {
-      return { percent: 0, power: 0 };
+
+    // Prefer actual vote data when available
+    if (totalPower > 0) {
+      const abstainPower = drepVotes
+        .filter((v) => v.vote === "Abstain")
+        .reduce((sum, v) => sum + (v.votingPowerAda || 0), 0);
+
+      if (abstainPower > 0) {
+        return {
+          percent: (abstainPower / totalPower) * 100,
+          power: abstainPower,
+        };
+      }
     }
-    const abstainPower = drepVotes
-      .filter((v) => v.vote === "Abstain")
-      .reduce((sum, v) => sum + (v.votingPowerAda || 0), 0);
-    return {
-      percent: (abstainPower / totalPower) * 100,
-      power: abstainPower,
-    };
-  }, [allVotes]);
+
+    // Fallback to aggregated tallies from selectedAction
+    const percent = selectedAction?.drepAbstainPercent ?? 0;
+    const yesAda = parseNumeric(selectedAction?.drepYesAda);
+    const noAda = parseNumeric(selectedAction?.drepNoAda);
+    const derivedPower =
+      deriveAbstainValue(
+        yesAda,
+        selectedAction?.drepYesPercent,
+        noAda,
+        selectedAction?.drepNoPercent,
+        percent
+      ) ?? 0;
+
+    return { percent, power: derivedPower };
+  }, [allVotes, selectedAction]);
 
   const spoAbstainStats = useMemo(() => {
     const spoVotes = allVotes.filter((v) => v.voterType === "SPO");
@@ -374,17 +411,36 @@ export default function GovernanceDetail() {
       (sum, v) => sum + (v.votingPowerAda || 0),
       0
     );
-    if (totalPower <= 0) {
-      return { percent: 0, power: 0 };
+
+    // Prefer actual vote data when available
+    if (totalPower > 0) {
+      const abstainPower = spoVotes
+        .filter((v) => v.vote === "Abstain")
+        .reduce((sum, v) => sum + (v.votingPowerAda || 0), 0);
+
+      if (abstainPower > 0) {
+        return {
+          percent: (abstainPower / totalPower) * 100,
+          power: abstainPower,
+        };
+      }
     }
-    const abstainPower = spoVotes
-      .filter((v) => v.vote === "Abstain")
-      .reduce((sum, v) => sum + (v.votingPowerAda || 0), 0);
-    return {
-      percent: (abstainPower / totalPower) * 100,
-      power: abstainPower,
-    };
-  }, [allVotes]);
+
+    // Fallback to aggregated tallies from selectedAction
+    const percent = selectedAction?.spoAbstainPercent ?? 0;
+    const yesAda = parseNumeric(selectedAction?.spoYesAda);
+    const noAda = parseNumeric(selectedAction?.spoNoAda);
+    const derivedPower =
+      deriveAbstainValue(
+        yesAda,
+        selectedAction?.spoYesPercent,
+        noAda,
+        selectedAction?.spoNoPercent,
+        percent
+      ) ?? 0;
+
+    return { percent, power: derivedPower };
+  }, [allVotes, selectedAction]);
 
   const ccAbstainStats = useMemo(() => {
     // When selectedAction is not yet loaded, return safe defaults
@@ -392,40 +448,27 @@ export default function GovernanceDetail() {
       return { percent: 0, count: 0, yesCount: 0, noCount: 0 };
     }
 
-    const ccVotes = allVotes.filter((v) => v.voterType === "CC");
+    const ccVotes = selectedAction.ccVotes || [];
 
-    if (ccVotes.length === 0) {
-      const yesCountInner = selectedAction.cc?.yesCount ?? 0;
-      const noCountInner = selectedAction.cc?.noCount ?? 0;
-      const percent = selectedAction.cc?.abstainPercent ?? 0;
-      const derivedAbstain =
-        deriveCcAbstainCount(
-          yesCountInner,
-          noCountInner,
-          selectedAction.cc?.yesPercent,
-          selectedAction.cc?.noPercent,
-          percent
-        ) ?? 0;
+    // If we have per-CC-member votes from the backend, always derive
+    // Yes/No/Abstain counts from those and never fall back to summary.
+    if (ccVotes.length > 0) {
+      const yesCountInner = ccVotes.filter((v) => v.vote === "Yes").length;
+      const noCountInner = ccVotes.filter((v) => v.vote === "No").length;
+      const abstainCount = ccVotes.filter((v) => v.vote === "Abstain").length;
 
       return {
-        percent,
-        count: derivedAbstain,
+        percent: (abstainCount / ccVotes.length) * 100,
+        count: abstainCount,
         yesCount: yesCountInner,
         noCount: noCountInner,
       };
     }
 
-    const yesCountInner = ccVotes.filter((v) => v.vote === "Yes").length;
-    const noCountInner = ccVotes.filter((v) => v.vote === "No").length;
-    const abstainCount = ccVotes.filter((v) => v.vote === "Abstain").length;
-
-    return {
-      percent: (abstainCount / ccVotes.length) * 100,
-      count: abstainCount,
-      yesCount: yesCountInner,
-      noCount: noCountInner,
-    };
-  }, [allVotes, selectedAction]);
+    // No CC votes yet – treat as zeroes; the UI will show
+    // a "No data" donut/placeholder rather than misleading counts.
+    return { percent: 0, count: 0, yesCount: 0, noCount: 0 };
+  }, [selectedAction]);
 
   // Parse proposal hash outside JSX to avoid IIFE causing component remount
   const parsedProposalHash = selectedAction?.hash
@@ -531,9 +574,20 @@ export default function GovernanceDetail() {
     canRoleVoteOnAction(selectedAction.type, "CC") &&
     !isCcNotApplicable(selectedAction);
 
-  const drepInfo = allowDRep ? selectedAction.drep : undefined;
-  const spoInfo = allowSPO ? selectedAction.spo : undefined;
-  const ccInfo = allowCC ? selectedAction.cc : undefined;
+  // Always wire through available vote info so donuts render
+  // whenever on-chain data exists. Eligibility is still used
+  // to drive placeholder messaging.
+  const drepInfo = selectedAction.drep;
+  const spoThreshold = selectedAction.threshold?.spoThreshold;
+  const spoInfo =
+    spoThreshold !== null && spoThreshold !== undefined
+      ? selectedAction.spo
+      : undefined;
+  const ccThreshold = selectedAction.threshold?.ccThreshold;
+  const ccInfo =
+    ccThreshold !== null && ccThreshold !== undefined
+      ? selectedAction.cc
+      : undefined;
 
   const drepYesAda = parseNumeric(drepInfo?.yesAda);
   const drepNoAda = parseNumeric(drepInfo?.noAda);
@@ -726,36 +780,34 @@ export default function GovernanceDetail() {
                                 style={{ overflow: "visible" }}
                               >
                                 <div className="flex flex-col items-center gap-3">
-                                  {allowDRep ? (
-                                    drepInfo ? (
-                                      <>
-                                        <VoteProgress
-                                          title="DRep Votes"
-                                          yesPercent={drepInfo.yesPercent}
-                                          noPercent={drepInfo.noPercent}
-                                          abstainPercent={drepAbstainStats.percent}
-                                          yesValue={drepYesAda}
-                                          noValue={drepNoAda}
-                                          abstainValue={drepAbstainStats.power}
-                                          valueUnit="ada"
-                                          className="origin-center scale-90 md:scale-100"
-                                        />
-                                        <RoleLegend
-                                          role="DRep"
-                                          yesLabel={formatAdaValue(drepYesAda || 0)}
-                                          noLabel={formatAdaValue(drepNoAda || 0)}
-                                          abstainLabel={formatAdaValue(
-                                            drepAbstainStats.power
-                                          )}
-                                          unit="ADA"
-                                        />
-                                      </>
-                                    ) : (
-                                      <RolePlaceholder
-                                        role="DRep"
-                                        message="No on-chain data yet"
+                                  {drepInfo ? (
+                                    <>
+                                      <VoteProgress
+                                        title="DRep Votes"
+                                        yesPercent={drepInfo.yesPercent}
+                                        noPercent={drepInfo.noPercent}
+                                        abstainPercent={drepAbstainStats.percent}
+                                        yesValue={drepYesAda}
+                                        noValue={drepNoAda}
+                                        abstainValue={drepAbstainStats.power}
+                                        valueUnit="ada"
+                                        className="origin-center scale-90 md:scale-100"
                                       />
-                                    )
+                                      <RoleLegend
+                                        role="DRep"
+                                        yesLabel={formatAdaValue(drepYesAda || 0)}
+                                        noLabel={formatAdaValue(drepNoAda || 0)}
+                                        abstainLabel={formatAdaValue(
+                                          drepAbstainStats.power
+                                        )}
+                                        unit="ADA"
+                                      />
+                                    </>
+                                  ) : allowDRep ? (
+                                    <RolePlaceholder
+                                      role="DRep"
+                                      message="No on-chain data yet"
+                                    />
                                   ) : (
                                     <RolePlaceholder
                                       role="DRep"
@@ -764,37 +816,35 @@ export default function GovernanceDetail() {
                                   )}
                                 </div>
                                 <div className="flex flex-col items-center gap-3">
-                                  {allowCC ? (
-                                    ccInfo ? (
-                                      <>
-                                        <VoteProgress
-                                          title="CC"
-                                          yesPercent={ccInfo.yesPercent}
-                                          noPercent={ccInfo.noPercent || 0}
-                                          abstainPercent={
-                                            ccInfo.abstainPercent ??
-                                            ccAbstainStats.percent
-                                          }
-                                          yesValue={ccYesCount}
-                                          noValue={ccNoCount}
-                                          abstainValue={ccAbstainStats.count}
-                                          valueUnit="count"
-                                          className="origin-center scale-90 md:scale-100"
-                                        />
-                                        <RoleLegend
-                                          role="CC"
-                                          yesLabel={`${ccYesCount}`}
-                                          noLabel={`${ccNoCount}`}
-                                          abstainLabel={`${ccAbstainStats.count ?? 0}`}
-                                          unit="votes"
-                                        />
-                                      </>
-                                    ) : (
-                                      <RolePlaceholder
-                                        role="CC"
-                                        message="No on-chain data yet"
+                                  {ccInfo ? (
+                                    <>
+                                      <VoteProgress
+                                        title="CC"
+                                        yesPercent={ccInfo.yesPercent}
+                                        noPercent={ccInfo.noPercent || 0}
+                                        abstainPercent={
+                                          ccInfo.abstainPercent ??
+                                          ccAbstainStats.percent
+                                        }
+                                        yesValue={ccYesCount}
+                                        noValue={ccNoCount}
+                                        abstainValue={ccAbstainStats.count}
+                                        valueUnit="count"
+                                        className="origin-center scale-90 md:scale-100"
                                       />
-                                    )
+                                      <RoleLegend
+                                        role="CC"
+                                        yesLabel={`${ccYesCount}`}
+                                        noLabel={`${ccNoCount}`}
+                                        abstainLabel={`${ccAbstainStats.count ?? 0}`}
+                                        unit="votes"
+                                      />
+                                    </>
+                                  ) : allowCC ? (
+                                    <RolePlaceholder
+                                      role="CC"
+                                      message="No on-chain data yet"
+                                    />
                                   ) : (
                                     <RolePlaceholder
                                       role="CC"
@@ -803,36 +853,34 @@ export default function GovernanceDetail() {
                                   )}
                                 </div>
                                 <div className="flex flex-col items-center gap-3">
-                                  {allowSPO ? (
-                                    spoInfo ? (
-                                      <>
-                                        <VoteProgress
-                                          title="SPO Votes"
-                                          yesPercent={spoInfo.yesPercent}
-                                          noPercent={spoInfo.noPercent || 0}
-                                          abstainPercent={spoAbstainStats.percent}
-                                          yesValue={spoYesAda}
-                                          noValue={spoNoAda}
-                                          abstainValue={spoAbstainStats.power}
-                                          valueUnit="ada"
-                                          className="origin-center scale-90 md:scale-100"
-                                        />
-                                        <RoleLegend
-                                          role="SPO"
-                                          yesLabel={formatAdaValue(spoYesAda || 0)}
-                                          noLabel={formatAdaValue(spoNoAda || 0)}
-                                          abstainLabel={formatAdaValue(
-                                            spoAbstainStats.power
-                                          )}
-                                          unit="ADA"
-                                        />
-                                      </>
-                                    ) : (
-                                      <RolePlaceholder
-                                        role="SPO"
-                                        message="No on-chain data yet"
+                                  {spoInfo ? (
+                                    <>
+                                      <VoteProgress
+                                        title="SPO Votes"
+                                        yesPercent={spoInfo.yesPercent}
+                                        noPercent={spoInfo.noPercent || 0}
+                                        abstainPercent={spoAbstainStats.percent}
+                                        yesValue={spoYesAda}
+                                        noValue={spoNoAda}
+                                        abstainValue={spoAbstainStats.power}
+                                        valueUnit="ada"
+                                        className="origin-center scale-90 md:scale-100"
                                       />
-                                    )
+                                      <RoleLegend
+                                        role="SPO"
+                                        yesLabel={formatAdaValue(spoYesAda || 0)}
+                                        noLabel={formatAdaValue(spoNoAda || 0)}
+                                        abstainLabel={formatAdaValue(
+                                          spoAbstainStats.power
+                                        )}
+                                        unit="ADA"
+                                      />
+                                    </>
+                                  ) : allowSPO ? (
+                                    <RolePlaceholder
+                                      role="SPO"
+                                      message="No on-chain data yet"
+                                    />
                                   ) : (
                                     <RolePlaceholder
                                       role="SPO"

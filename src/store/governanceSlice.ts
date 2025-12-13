@@ -216,6 +216,10 @@ const governanceSlice = createSlice({
       })
       .addCase(loadGovernanceActions.fulfilled, (state, action) => {
         state.isLoadingActions = false;
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.log("[governanceSlice] loaded actions", action.payload);
+        }
         state.actions = action.payload;
       })
       .addCase(loadGovernanceActions.rejected, (state, action) => {

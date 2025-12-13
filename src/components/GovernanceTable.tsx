@@ -21,7 +21,6 @@ import {
   deriveAbstainValue,
   deriveCcAbstainCount,
 } from "@/lib/voteMath";
-import { canRoleVoteOnAction } from "@/lib/governanceVotingEligibility";
 import { VoteButtons } from "@/components/governance/VoteButtons";
 
 const TYPE_LABELS: Record<ProposalType, string> = {
@@ -378,13 +377,16 @@ export function GovernanceTable() {
       ) : (
         <div className="divide-y divide-border/50">
           {filteredActions.map((action) => {
-            const allowDRep = canRoleVoteOnAction(action.type, "DRep");
-            const allowSPO = canRoleVoteOnAction(action.type, "SPO");
-            const allowCC = canRoleVoteOnAction(action.type, "CC");
-
-            const drepInfo = allowDRep ? action.drep : undefined;
-            const spoInfo = allowSPO ? action.spo : undefined;
-            const ccInfo = allowCC ? action.cc : undefined;
+            // Always show donuts when we have data, even if a role
+            // isn't formally eligible for this proposal type.
+            // Eligibility is used in other parts of the UI.
+            const drepInfo = action.drep;
+            const spoThreshold = action.threshold?.spoThreshold;
+            const spoInfo =
+              spoThreshold !== null && spoThreshold !== undefined
+                ? action.spo
+                : undefined;
+            const ccInfo = action.cc;
 
             const drepYesPercent = drepInfo?.yesPercent ?? 0;
             const drepNoPercent = drepInfo?.noPercent ?? 0;
