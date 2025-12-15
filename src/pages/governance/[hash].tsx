@@ -443,31 +443,31 @@ export default function GovernanceDetail() {
   }, [allVotes, selectedAction]);
 
   const ccAbstainStats = useMemo(() => {
-    // When selectedAction is not yet loaded, return safe defaults
+    // For CC, always rely on the summary tallies rather than ccVotes,
+    // since ccVotes can be partial while the summary reflects the
+    // full on-chain result.
     if (!selectedAction) {
       return { percent: 0, count: 0, yesCount: 0, noCount: 0 };
     }
 
-    const ccVotes = selectedAction.ccVotes || [];
+    const ccSummary = selectedAction.cc;
 
-    // If we have per-CC-member votes from the backend, always derive
-    // Yes/No/Abstain counts from those and never fall back to summary.
-    if (ccVotes.length > 0) {
-      const yesCountInner = ccVotes.filter((v) => v.vote === "Yes").length;
-      const noCountInner = ccVotes.filter((v) => v.vote === "No").length;
-      const abstainCount = ccVotes.filter((v) => v.vote === "Abstain").length;
+    const abstainPercent =
+      ccSummary?.abstainPercent ?? selectedAction.ccAbstainPercent ?? 0;
+    const abstainCount =
+      ccSummary?.abstainCount ?? selectedAction.ccAbstainCount ?? 0;
 
-      return {
-        percent: (abstainCount / ccVotes.length) * 100,
-        count: abstainCount,
-        yesCount: yesCountInner,
-        noCount: noCountInner,
-      };
-    }
+    const yesCount =
+      ccSummary?.yesCount ?? selectedAction.ccYesCount ?? 0;
+    const noCount =
+      ccSummary?.noCount ?? selectedAction.ccNoCount ?? 0;
 
-    // No CC votes yet – treat as zeroes; the UI will show
-    // a "No data" donut/placeholder rather than misleading counts.
-    return { percent: 0, count: 0, yesCount: 0, noCount: 0 };
+    return {
+      percent: abstainPercent,
+      count: abstainCount,
+      yesCount,
+      noCount,
+    };
   }, [selectedAction]);
 
   // Parse proposal hash outside JSX to avoid IIFE causing component remount
